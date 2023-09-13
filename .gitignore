@@ -1,3 +1,5 @@
 .DS_Store
 .idea
 .buchhalter.yaml
+.tmp
+data
