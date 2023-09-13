@@ -1,0 +1,94 @@
+{
+  "$id": "https://buchhalter.ai/step.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "",
+  "type": "object",
+  "properties": {
+    "required": [
+          "action"
+        ],
+    "properties": {
+      "action": {
+        "type": "string",
+        "minLength": 1
+      },
+      "selector": {
+        "type": "string",
+        "minLength": 1
+      },
+      "value": {
+        "type": "string",
+        "minLength": 1
+      },
+      "url": {
+        "type": "string",
+        "format": "uri",
+        "minLength": 1
+      },
+      "when": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    "switch": [
+      {
+        "if": {
+          "required": [ "action" ],
+          "properties": { "action": { "constant": "open" } }
+        },
+        "then": {
+          "required": [
+            "url"
+          ]
+        },
+        "continue": true
+      },
+      {
+        "if": {
+          "properties": { "action": { "string": "type", "type": "string" } }
+        },
+        "then": {
+          "required": [
+            "selector",
+            "value"
+          ]
+        },
+        "continue": true
+      },
+      {
+        "if": {
+          "required": [ "action" ],
+          "properties": { "action": { "constant": "click" } }
+        },
+        "then": {
+          "required": [
+            "selector"
+          ]
+        },
+        "continue": true
+      },
+      {
+        "if": {
+          "required": [ "action" ],
+          "properties": { "action": { "constant": "evaluate" } }
+        },
+        "then": {
+          "required": [
+            "value"
+          ]
+        },
+        "continue": true
+      }
+    ]
+  },
+  "additionalProperties": false
+}

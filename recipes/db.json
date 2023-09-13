@@ -1,0 +1,181 @@
+{
+  "name": "Open Invoice Collector DB",
+  "version": "stable",
+  "recipes": [
+    {
+      "provider": "hetzner",
+      "domains": [
+        "accounts.hetzner.com",
+        "hetzner.com"
+      ],
+      "version": "20230907",
+      "type": "browser",
+      "steps": [
+        {
+          "action": "open",
+          "url": "https://accounts.hetzner.com/login",
+          "description": "Open the login page."
+        },
+        {
+          "action": "type",
+          "selector": "#_username",
+          "value": "{{ username }}",
+          "description": "Insert the username."
+        },
+        {
+          "action": "type",
+          "selector": "#_password",
+          "value": "{{ password }}",
+          "description": "Insert the password."
+        },
+        {
+          "action": "click",
+          "selector": "#submit-login",
+          "description": "Click login form submit button."
+        },
+        {
+          "action": "waitFor",
+          "selector": "#input-verify-code",
+          "description": "Wait for the 2FA code input field.",
+          "when": {
+            "url": "https://accounts.hetzner.com/2fa"
+          }
+        },
+        {
+          "action": "type",
+          "selector": "#input-verify-code",
+          "value": "{{ totp }}",
+          "description": "Insert the 2FA code (if required)",
+          "when": {
+            "url": "https://accounts.hetzner.com/2fa"
+          }
+        },
+        {
+          "action": "sleep",
+          "value": "1",
+          "description": "Wait for 1 second to avoid 2fa form issues.",
+          "when": {
+            "url": "https://accounts.hetzner.com/2fa"
+          }
+        },
+        {
+          "action": "click",
+          "selector": "#btn-submit",
+          "description": "Click 2FA form submit button.",
+          "when": {
+            "url": "https://accounts.hetzner.com/2fa"
+          }
+        },
+        {
+          "action": "sleep",
+          "value": "1",
+          "description": "Wait for 1 second to avoid 2fa form issues."
+        },
+        {
+          "action": "open",
+          "url": "https://accounts.hetzner.com/invoice",
+          "description": "Open the billing page."
+        },
+        {
+          "action": "sleep",
+          "value": "1",
+          "description": "Wait for 1 second to avoid 2fa form issues."
+        },
+        {
+          "action": "downloadAll",
+          "selector": "ul.invoice-list > li > div > div > div > div > a:nth-child(1)",
+          "description": "Click all PDF links and download invoices."
+        },
+        {
+          "action": "open",
+          "url": "https://accounts.hetzner.com/logout",
+          "description": "Logout from the account."
+        }
+      ]
+    },
+    {
+      "provider": "digitalocean",
+      "domains": [
+        "cloud.digitalocean.com",
+        "app.digitalocean.com"
+      ],
+      "version": "20230125",
+      "type": "browser",
+      "steps": [
+        {
+          "action": "open",
+          "url": "https://cloud.digitalocean.com/login",
+          "description": "Open the login page."
+        },
+        {
+          "action": "type",
+          "selector": "#email",
+          "value": "{{ username }}",
+          "description": "Insert the username."
+        },
+        {
+          "action": "type",
+          "selector": "#password",
+          "value": "{{ password }}",
+          "description": "Insert the password."
+        },
+        {
+          "action": "click",
+          "selector": "#root > div > div:nth-child(1) > div > div > div > div > div > div > form > button",
+          "description": "Click login form submit button."
+        },
+        {
+          "action": "waitFor",
+          "selector": "#code",
+          "description": "Wait for the 2FA code input field.",
+          "when": {
+            "url": "https://cloud.digitalocean.com/login"
+          }
+        },
+        {
+          "action": "type",
+          "selector": "#code",
+          "value": "{{ totp }}",
+          "description": "Insert the 2FA code (if required)",
+          "when": {
+            "url": "https://cloud.digitalocean.com/login"
+          }
+        },
+        {
+          "action": "sleep",
+          "value": "1",
+          "description": "Wait for 1 second to avoid 2fa form issues."
+        },
+        {
+          "action": "click",
+          "selector": "#root > div > div:nth-child(1) > div > div > div > div > div > form > button",
+          "description": "Click 2FA form submit button.",
+          "when": {
+            "url": "https://cloud.digitalocean.com/login"
+          }
+        },
+        {
+          "action": "waitFor",
+          "selector": ".avatar-small",
+          "description": "Wait for the avatar image"
+        },
+        {
+          "action": "open",
+          "url": "https://cloud.digitalocean.com/account/billing",
+          "description": "Open the billing page."
+        },
+        {
+          "action": "downloadAll",
+          "selector": "#history tbody tr td:nth-child(4) a:nth-child(1)",
+          "filterUrlsWith": "https://cloud.digitalocean.com/v2/customers/(.*)/invoices/(.*)/pdf",
+          "description": "Click all PDFs links. Only download invoices no payment recipes. This is necessary because the pdf download urls are rendered on the client side and there's no direct link in the html."
+        },
+        {
+          "action": "open",
+          "url": "https://cloud.digitalocean.com/logout",
+          "description": "Logout from the account."
+        }
+      ]
+    }
+  ]
+}
