@@ -25,44 +25,40 @@ import (
 var downloadsDirectory string
 var scriptID page.ScriptIdentifier
 var browserCtx context.Context
+var recipeTimeout = 10 * time.Second
 
 type ResultProgressUpdate struct {
 	Percent float64
+}
+
+type ResultTitleAndDescriptionUpdate struct {
+	Title       string
+	Description string
+}
+
+type RecipeResult struct {
+	Status              string
+	StatusText          string
+	LastStepId          string
+	LastStepDescription string
 }
 
 func Init() {
 
 }
 
-func RunRecipe(p *tea.Program, tsc int, scs int, recipe *parser.Recipe, itemId string) {
+func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, itemId string) RecipeResult {
 	//Load username, password, totp from vault
 	credentials := vault.GetCredentialsByItemId(itemId)
 
 	// New creates a new context for use with chromedp. With this context
 	// you can use chromedp as you normally would.
 	ctx, cancel, err := cu.New(cu.NewConfig(
-		//cu.WithHeadless(),
-		cu.WithTimeout(60 * time.Second),
+		cu.WithContext(browserCtx),
 	))
-	browserCtx = ctx
 	if err != nil {
 		panic(err)
 	}
-	defer cancel()
-
-	/**
-	ctx, cancel := chromedp.NewExecAllocator(context.Background(),
-		append(chromedp.DefaultExecAllocatorOptions[:],
-			chromedp.NoDefaultBrowserCheck,
-			chromedp.NoFirstRun,
-			chromedp.Flag("headless", false),
-			chromedp.WindowSize(1200, 800),
-			chromedp.UserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"))...)
-	defer cancel()
-	*/
-
-	//chromedp.WithDebugf(log.Printf),
-	ctx, cancel = chromedp.NewContext(ctx, chromedp.WithLogf(log.Printf))
 	defer cancel()
 
 	// create a timeout as a safety net to prevent any infinite wait loops
@@ -101,29 +97,55 @@ func RunRecipe(p *tea.Program, tsc int, scs int, recipe *parser.Recipe, itemId s
 
 	var cs float64
 	n := 1
+	var result RecipeResult
 	for _, step := range recipe.Steps {
-		switch action := step.Action; action {
-		case "open":
-			stepOpen(ctx, step)
-		case "click":
-			stepClick(ctx, step)
-		case "type":
-			stepType(ctx, step, credentials)
-		case "sleep":
-			stepSleep(ctx, step)
-		case "waitFor":
-			stepWaitFor(ctx, step)
-		case "downloadAll":
-			stepDownloadAll(ctx, step)
-		case "runScript":
-			stepRunScript(ctx, step)
-		case "runScriptDownloadUrls":
-			stepRunScriptDownloadUrls(ctx, step)
+		c1 := make(chan bool, 1)
+		log.Printf("Downloading invoice from %s - step %d of %d", step.Action, n, scs)
+		p.Send(ResultTitleAndDescriptionUpdate{Title: "Downloading invoices from " + recipe.Provider + " (" + strconv.Itoa(n) + "/" + strconv.Itoa(scs) + "):", Description: step.Description})
+		/** Timeout recipe if something goes wrong */
+		go func() {
+			switch action := step.Action; action {
+			case "open":
+				stepOpen(ctx, step)
+			case "click":
+				stepClick(ctx, step)
+			case "type":
+				stepType(ctx, step, credentials)
+			case "sleep":
+				stepSleep(ctx, step)
+			case "waitFor":
+				stepWaitFor(ctx, step)
+			case "downloadAll":
+				stepDownloadAll(ctx, step)
+			case "runScript":
+				stepRunScript(ctx, step)
+			case "runScriptDownloadUrls":
+				stepRunScriptDownloadUrls(ctx, step)
+			}
+			c1 <- true
+		}()
+		select {
+		case _ = <-c1:
+			result = RecipeResult{
+				Status:              "success",
+				StatusText:          "- " + recipe.Provider + " finished successfully.",
+				LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
+				LastStepDescription: step.Description,
+			}
+		case <-time.After(recipeTimeout):
+			result = RecipeResult{
+				Status:              "error",
+				StatusText:          "x " + recipe.Provider + " aborted with timeout.",
+				LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
+				LastStepDescription: step.Description,
+			}
+			return result
 		}
-		cs = (float64(scs) + float64(n)) / float64(tsc)
+		cs = (float64(bcs) + float64(n)) / float64(tsc)
 		p.Send(ResultProgressUpdate{Percent: cs})
 		n++
 	}
+	return result
 }
 
 func Quit() {
@@ -207,7 +229,7 @@ func stepDownloadAll(ctx context.Context, step parser.Step) {
 	wg.Add(len(nodes))
 	x := 0
 	for _, n := range nodes {
-		if x < 2 {
+		if x >= 2 {
 			break
 		}
 		log.Println("Download WG add")
@@ -257,7 +279,6 @@ func stepRunScriptDownloadUrls(ctx context.Context, step parser.Step) {
 	var res []string
 	log.Println(`SCRIPT DOWNLOAD ARRAY: ` + step.Value)
 	chromedp.Evaluate(`Object.values(`+step.Value+`);`, &res)
-	log.Println(res)
 	for _, url := range res {
 		log.Println(`DOWNLOAD: ` + url)
 		if err := chromedp.Run(ctx,

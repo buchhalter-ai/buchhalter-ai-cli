@@ -53,7 +53,7 @@
         {
           "action": "sleep",
           "value": "1",
-          "description": "Wait for 1 second to avoid 2fa form issues.",
+          "description": "Wait a second.",
           "when": {
             "url": "https://accounts.hetzner.com/2fa"
           }
@@ -69,7 +69,7 @@
         {
           "action": "sleep",
           "value": "1",
-          "description": "Wait for 1 second to avoid 2fa form issues."
+          "description": "Wait a second."
         },
         {
           "action": "open",
@@ -79,7 +79,7 @@
         {
           "action": "sleep",
           "value": "1",
-          "description": "Wait for 1 second to avoid 2fa form issues."
+          "description": "Wait a second"
         },
         {
           "action": "downloadAll",
@@ -168,7 +168,7 @@
           "action": "downloadAll",
           "selector": "#history tbody tr td:nth-child(4) a:nth-child(1)",
           "filterUrlsWith": "https://cloud.digitalocean.com/v2/customers/(.*)/invoices/(.*)/pdf",
-          "description": "Click all PDFs links. Only download invoices no payment recipes. This is necessary because the pdf download urls are rendered on the client side and there's no direct link in the html."
+          "description": "Click PDF links."
         },
         {
           "action": "open",

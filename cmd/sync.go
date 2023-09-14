@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 	"os"
 	"strings"
 	"time"
@@ -36,6 +35,7 @@ var (
 type tickMsg time.Time
 type model struct {
 	currentAction string
+	details       string
 	showProgress  bool
 	progress      progress.Model
 	spinner       spinner.Model
@@ -43,6 +43,8 @@ type model struct {
 	quitting      bool
 	hasError      bool
 }
+
+type quitMsg struct{}
 
 type resultMsg struct {
 	duration time.Duration
@@ -84,12 +86,6 @@ func (m model) Init() tea.Cmd {
 	)
 }
 
-//func (m model) Init() tea.Cmd {
-//	m.currentAction.title = "Validiere OICDB-Rezepte."
-//	runRecipes()
-//	return tickCmd()
-//}
-
 func initialModel() model {
 	const numLastResults = 5
 	s := spinner.New()
@@ -98,6 +94,7 @@ func initialModel() model {
 
 	m := model{
 		currentAction: "Initializing...",
+		details:       "Loading...",
 		showProgress:  true,
 		progress:      progress.New(progress.WithGradient("#9FC131", "#DBF227")),
 		spinner:       s,
@@ -108,22 +105,16 @@ func initialModel() model {
 }
 
 func init() {
-	// Initialize viper config
-	viper.SetConfigType("yaml")
-	viper.SetConfigName("buchhalter.yaml")
-	viper.AddConfigPath(".")
-	err := viper.ReadInConfig()
-	if err != nil {
-		fmt.Println("Error reading config file:", err)
-		return
-	}
-
-	// Set default values for viper config
-	viper.SetDefault("one_password_cli_command", "/usr/local/bin/op")
-	viper.SetDefault("one_password_base", "Base")
-	viper.SetDefault("one_password_tag", "buchhalter-ai")
-
 	rootCmd.AddCommand(syncCmd)
+}
+
+func quit(m model) model {
+	m.currentAction = "Thanks for using buchhalter.ai!"
+	m.quitting = true
+	m.showProgress = false
+	m.details = "HAVE A NICE DAY! :)"
+	go browser.Quit()
+	return m
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -131,15 +122,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
-			m.currentAction = "Yeah! Have a nice day!"
-			m.quitting = true
-			m.showProgress = false
-			go browser.Quit()
-			return m, tea.Quit
+			mn := quit(m)
+			return mn, tea.Quit
 		default:
 			return m, nil
 		}
 
+	case quitMsg:
+		mn := quit(m)
+		return mn, tea.Quit
 	case tea.WindowSizeMsg:
 		m.progress.Width = msg.Width - padding*2 - 4
 		if m.progress.Width > maxWidth {
@@ -161,6 +152,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case browser.ResultProgressUpdate:
 		cmd := m.progress.SetPercent(msg.Percent)
 		return m, cmd
+	case browser.ResultTitleAndDescriptionUpdate:
+		m.currentAction = msg.Title
+		m.details = msg.Description
+		return m, nil
 	case tickMsg:
 		if m.progress.Percent() == 1.0 {
 			m.showProgress = false
@@ -194,13 +189,14 @@ func (m model) View() string {
 
 	if m.hasError == false {
 		s += m.spinner.View() + m.currentAction
+		s += helpStyle.Render("  " + m.details)
 	} else {
 		s += errorStyle.Render("ERROR: " + m.currentAction)
 	}
 
-	s += "\n\n"
+	s += "\n"
 
-	if m.progress.Percent() > 0 {
+	if m.showProgress == true {
 		s += m.progress.View() + "\n\n"
 	}
 
@@ -230,24 +226,27 @@ func runRecipes(p *tea.Program, r []recipeToExecute) {
 	p.Send(resultStatusUpdate{title: t})
 	p.Send(ResultProgressUpdate{Percent: 0.001})
 
-	// calculate total number of steps
-	tsc := 0
-	scs := 0
+	tsc := 0 //total steps count
+	scs := 0 //count steps current recipe
+	bcs := 0 //base count steps
+	var recipeResult browser.RecipeResult
 	for i := range r {
 		tsc += len(r[i].recipe.Steps)
 	}
 	for i := range r {
 		s := time.Now()
-		p.Send(resultMsg{duration: 0, step: "- " + r[i].recipe.Provider + " started."})
-		browser.RunRecipe(p, tsc, scs, r[i].recipe, r[i].vaultItemId)
-		p.Send(resultMsg{duration: time.Since(s), step: "- " + r[i].recipe.Provider + " finished."})
 		scs = len(r[i].recipe.Steps)
+		p.Send(resultStatusUpdate{title: "Downloading invoices from " + r[i].recipe.Provider + ":", hasError: false})
+		recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, r[i].vaultItemId)
+		p.Send(resultMsg{duration: time.Since(s), step: recipeResult.StatusText})
+		bcs += scs
 	}
+	p.Send(quitMsg{})
 }
 
 var syncCmd = &cobra.Command{
 	Use:   "sync",
-	Short: "Synchronize all invoices",
+	Short: "Synchronize all invoices from your suppliers",
 	Long:  "The sync command uses all buchhalter tagged credentials from your vault and synchronizes all invoices.",
 	Run: func(cmd *cobra.Command, cmdArgs []string) {
 		args = cmdArgs

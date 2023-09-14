@@ -4,10 +4,13 @@ Copyright © 2023 buchhalter.ai <support@buchhalter.ai>
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"io"
+	"log"
 	"os"
 )
 
@@ -38,7 +41,7 @@ var headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#9FC
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "buchhalter",
-	Short: "Sync invoices from Saas Providers",
+	Short: "Automatically sync invoices from all your suppliers",
 	Long:  longDescription,
 }
 
@@ -46,12 +49,53 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
+		log.Fatal(err)
 		os.Exit(1)
 	}
 }
 
 func init() {
-	viper.SetConfigFile(".env")
-	viper.ReadInConfig()
-	rootCmd.Flags().BoolP("debug", "d", false, "Display debug output")
+	cobra.OnInitialize(initConfig)
+	rootCmd.PersistentFlags().BoolP("log", "l", false, "Log debug output")
+}
+
+func initConfig() {
+	viper.SetConfigFile(".buchhalter.yaml")
+	viper.AddConfigPath("$HOME/.buchhalter")
+	// Initialize viper config
+	err := viper.ReadInConfig()
+	if err != nil {
+		fmt.Println("Error reading config file:", err)
+		return
+	}
+	// Set default values for viper config
+	viper.SetDefault("one_password_cli_command", "/usr/local/bin/op")
+	viper.SetDefault("one_password_base", "Base")
+	viper.SetDefault("one_password_tag", "buchhalter-ai")
+
+	// Create data directory if not exists
+	path := "data"
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		err := os.Mkdir(path, os.ModePerm)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+
+	// Log settings
+	lx, _ := rootCmd.Flags().GetBool("log")
+	if lx == true {
+		fileName := "data/buchhalter-cli.log"
+		logFile, err := os.OpenFile(fileName, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer logFile.Close()
+		log.SetOutput(logFile)
+	} else {
+		log.SetOutput(io.Discard)
+	}
+
+	// optional: log date-time, filename, and line number
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
 }
