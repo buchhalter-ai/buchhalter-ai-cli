@@ -75,7 +75,7 @@ func (r resultMsg) String() string {
 		return dotStyle.Render(strings.Repeat(".", maxWidth))
 	}
 	d := r.duration.Round(time.Second).String()
-	fill := strings.Repeat(".", maxWidth-1-s-len(d))
+	fill := strings.Repeat(".", maxWidth-1-s-(len(d)-8))
 	return fmt.Sprintf("%s %s%s", r.step, fill,
 		durationStyle.Render(d))
 }

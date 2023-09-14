@@ -7,6 +7,7 @@ import (
 	"errors"
 	cu "github.com/Davincible/chromedp-undetected"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/fetch"
@@ -26,6 +27,7 @@ var downloadsDirectory string
 var scriptID page.ScriptIdentifier
 var browserCtx context.Context
 var recipeTimeout = 10 * time.Second
+var textStyleBold = lipgloss.NewStyle().Bold(true).Render
 
 type ResultProgressUpdate struct {
 	Percent float64
@@ -128,14 +130,14 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 		case _ = <-c1:
 			result = RecipeResult{
 				Status:              "success",
-				StatusText:          "- " + recipe.Provider + " finished successfully.",
+				StatusText:          "- " + textStyleBold(recipe.Provider) + " finished successfully.",
 				LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
 				LastStepDescription: step.Description,
 			}
 		case <-time.After(recipeTimeout):
 			result = RecipeResult{
 				Status:              "error",
-				StatusText:          "x " + recipe.Provider + " aborted with timeout.",
+				StatusText:          "x " + textStyleBold(recipe.Provider) + " aborted with timeout.",
 				LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
 				LastStepDescription: step.Description,
 			}
