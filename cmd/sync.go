@@ -1,12 +1,17 @@
 package cmd
 
 import (
+	"buchhalter/lib/archive"
 	"buchhalter/lib/browser"
+	"buchhalter/lib/client"
+	"buchhalter/lib/repository"
+	"buchhalter/lib/utils"
 	"fmt"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/viper"
 	"os"
 	"strings"
 	"time"
@@ -30,10 +35,14 @@ var (
 	appStyle      = lipgloss.NewStyle().Margin(1, 2, 0, 2)
 	vaultItems    []vault.Item
 	args          []string
+	choices       = []string{"Yes", "No", "Always yes (don't ask again)"}
+	ChromeVersion string
+	RunData       repository.RunData
 )
 
 type tickMsg time.Time
 type model struct {
+	mode          string
 	currentAction string
 	details       string
 	showProgress  bool
@@ -42,13 +51,23 @@ type model struct {
 	results       []resultMsg
 	quitting      bool
 	hasError      bool
+	cursor        int
+	choice        string
 }
 
 type quitMsg struct{}
 
 type resultMsg struct {
-	duration time.Duration
-	step     string
+	duration      time.Duration
+	step          string
+	errorMessage  string
+	newFilesCount int
+}
+
+type resultModeUpdate struct {
+	mode    string
+	title   string
+	details string
 }
 
 type resultStatusUpdate struct {
@@ -93,6 +112,7 @@ func initialModel() model {
 	s.Style = spinnerStyle
 
 	m := model{
+		mode:          "sync",
 		currentAction: "Initializing...",
 		details:       "Loading...",
 		showProgress:  true,
@@ -109,11 +129,18 @@ func init() {
 }
 
 func quit(m model) model {
-	m.currentAction = "Thanks for using buchhalter.ai!"
-	m.quitting = true
-	m.showProgress = false
-	m.details = "HAVE A NICE DAY! :)"
+	if m.hasError == true {
+		m.currentAction = "ERROR while running recipes!"
+		m.quitting = true
+		m.showProgress = false
+	} else {
+		m.currentAction = "Thanks for using buchhalter.ai!"
+		m.quitting = true
+		m.showProgress = false
+		m.details = "HAVE A NICE DAY! :)"
+	}
 	go browser.Quit()
+	go client.Quit()
 	return m
 }
 
@@ -124,10 +151,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			mn := quit(m)
 			return mn, tea.Quit
-		default:
-			return m, nil
+		case "enter":
+			// Send the choice on the channel and exit.
+			m.choice = choices[m.cursor]
+			m.mode = "sync"
+			switch m.choice {
+			case "Yes":
+				sendMetrics(false)
+				mn := quit(m)
+				return mn, tea.Quit
+			case "No":
+				mn := quit(m)
+				return mn, tea.Quit
+			case "Always yes (don't ask again)":
+				sendMetrics(true)
+				mn := quit(m)
+				return mn, tea.Quit
+			}
+		case "down", "j":
+			m.cursor++
+			if m.cursor >= len(choices) {
+				m.cursor = 0
+			}
+		case "up", "k":
+			m.cursor--
+			if m.cursor < 0 {
+				m.cursor = len(choices) - 1
+			}
 		}
-
+		return m, nil
 	case quitMsg:
 		mn := quit(m)
 		return mn, tea.Quit
@@ -139,6 +191,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case resultMsg:
 		m.results = append(m.results[1:], msg)
+		if msg.errorMessage != "" {
+			m.hasError = true
+			m.details = msg.errorMessage
+			mn := quit(m)
+			return mn, tea.Quit
+		}
 		return m, nil
 	case resultStatusUpdate:
 		m.currentAction = msg.title
@@ -146,20 +204,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hasError = true
 		}
 		return m, nil
+	case resultModeUpdate:
+		m.currentAction = msg.title
+		m.details = msg.details
+		m.mode = msg.mode
+		m.showProgress = false
+		return m, nil
 	case ResultProgressUpdate:
 		cmd := m.progress.SetPercent(msg.Percent)
 		return m, cmd
-	case browser.ResultProgressUpdate:
+	case utils.ResultProgressUpdate:
 		cmd := m.progress.SetPercent(msg.Percent)
 		return m, cmd
-	case browser.ResultTitleAndDescriptionUpdate:
+	case utils.ResultTitleAndDescriptionUpdate:
 		m.currentAction = msg.Title
 		m.details = msg.Description
 		return m, nil
 	case tickMsg:
 		if m.progress.Percent() == 1.0 {
 			m.showProgress = false
-			return m, tea.Quit
+			return m, nil
 		}
 		cmd := m.progress.IncrPercent(0.25)
 		return m, tea.Batch(tickCmd(), cmd)
@@ -185,13 +249,21 @@ func tickCmd() tea.Cmd {
 
 func (m model) View() string {
 	var s string
-	s = longDescription + "\n"
+	s = fmt.Sprintf(
+		"%s\n%s\n%s%s\n%s\n",
+		headerStyle(LogoText),
+		textStyle("Automatically sync all your incoming invoices from your suppliers. "),
+		textStyle("More information at: "),
+		textStyleBold("https://buchhalter.ai"),
+		textStyleGrayBold("Using OICDB "+parser.OicdbVersion+" and CLI "+CliVersion),
+	) + "\n"
 
 	if m.hasError == false {
 		s += m.spinner.View() + m.currentAction
 		s += helpStyle.Render("  " + m.details)
 	} else {
 		s += errorStyle.Render("ERROR: " + m.currentAction)
+		s += helpStyle.Render("  " + m.details)
 	}
 
 	s += "\n"
@@ -200,9 +272,21 @@ func (m model) View() string {
 		s += m.progress.View() + "\n\n"
 	}
 
-	if m.hasError == false {
+	if m.hasError == false && m.mode == "sync" {
 		for _, res := range m.results {
 			s += res.String() + "\n"
+		}
+	}
+
+	if m.mode == "sendMetrics" && !m.quitting {
+		for i := 0; i < len(choices); i++ {
+			if m.cursor == i {
+				s += "(•) "
+			} else {
+				s += "( ) "
+			}
+			s += choices[i]
+			s += "\n"
 		}
 	}
 
@@ -217,9 +301,32 @@ func (m model) View() string {
 	return appStyle.Render(s)
 }
 
-func runRecipes(p *tea.Program, r []recipeToExecute) {
+func sendMetrics(a bool) {
+	repository.SendMetrics(RunData, CliVersion, ChromeVersion)
+	if a == true {
+		viper.Set("buchhalter_always_send_metrics", true)
+		_ = viper.WriteConfig()
+	}
+}
+
+func runRecipes(p *tea.Program, provider string, vaultItems []vault.Item) {
+	t := "Build archive index"
+	p.Send(resultStatusUpdate{title: t})
+	archive.BuildArchiveIndex()
+
+	if viper.GetBool("dev") == false {
+		t = "Checking for repository updates"
+		p.Send(resultStatusUpdate{title: t})
+		err := repository.UpdateIfAvailable()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
+	r := prepareRecipes(provider, vaultItems)
+
 	rc := len(r)
-	t := "Running recipes for " + fmt.Sprintf("%d", rc) + " suppliers..."
+	t = "Running recipes for " + fmt.Sprintf("%d", rc) + " suppliers..."
 	if rc == 1 {
 		t = "Running one recipe..."
 	}
@@ -229,7 +336,7 @@ func runRecipes(p *tea.Program, r []recipeToExecute) {
 	tsc := 0 //total steps count
 	scs := 0 //count steps current recipe
 	bcs := 0 //base count steps
-	var recipeResult browser.RecipeResult
+	var recipeResult utils.RecipeResult
 	for i := range r {
 		tsc += len(r[i].recipe.Steps)
 	}
@@ -237,11 +344,72 @@ func runRecipes(p *tea.Program, r []recipeToExecute) {
 		s := time.Now()
 		scs = len(r[i].recipe.Steps)
 		p.Send(resultStatusUpdate{title: "Downloading invoices from " + r[i].recipe.Provider + ":", hasError: false})
-		recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, r[i].vaultItemId)
-		p.Send(resultMsg{duration: time.Since(s), step: recipeResult.StatusText})
+		switch r[i].recipe.Type {
+		case "browser":
+			recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, r[i].vaultItemId)
+			if ChromeVersion == "" {
+				ChromeVersion = browser.ChromeVersion
+			}
+		case "client":
+			recipeResult = client.RunRecipe(p, tsc, scs, bcs, r[i].recipe, r[i].vaultItemId)
+			if ChromeVersion == "" {
+				ChromeVersion = client.ChromeVersion
+			}
+		}
+		rdx := repository.RunDataProvider{
+			Provider:         r[i].recipe.Provider,
+			Version:          r[i].recipe.Version,
+			Status:           recipeResult.StatusText,
+			LastErrorMessage: recipeResult.LastErrorMessage,
+			Duration:         time.Since(s).Seconds(),
+			NewFilesCount:    recipeResult.NewFilesCount,
+		}
+		RunData = append(RunData, rdx)
+		p.Send(resultMsg{duration: time.Since(s), newFilesCount: recipeResult.NewFilesCount, step: recipeResult.StatusTextFormatted, errorMessage: recipeResult.LastErrorMessage})
 		bcs += scs
 	}
-	p.Send(quitMsg{})
+
+	if viper.GetBool("buchhalter_always_send_metrics") == true {
+		repository.SendMetrics(RunData, CliVersion, ChromeVersion)
+		p.Send(quitMsg{})
+	} else if viper.GetBool("dev") == true {
+		p.Send(quitMsg{})
+	} else {
+		p.Send(resultModeUpdate{
+			mode:    "sendMetrics",
+			title:   "Let's improve buchhalter-cli together!",
+			details: "Allow buchhalter-cli to send anonymized usage data to our api?",
+		})
+	}
+}
+
+func prepareRecipes(provider string, vaultItems []vault.Item) []recipeToExecute {
+	parser.LoadRecipes()
+
+	// Run single provider recipe
+	var r []recipeToExecute
+	sc := 0
+	if provider != "" {
+		for i := range vaultItems {
+			// Check if a recipe exists for the item
+			recipe := parser.GetRecipeForItem(vaultItems[i])
+			if recipe != nil && provider == recipe.Provider {
+				sc = len(recipe.Steps)
+				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
+			}
+		}
+	} else {
+		// Run all recipes
+		for i := range vaultItems {
+			// Check if a recipe exists for the item
+			recipe := parser.GetRecipeForItem(vaultItems[i])
+			if recipe != nil {
+				sc = sc + len(recipe.Steps)
+				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
+			}
+		}
+	}
+	return r
 }
 
 var syncCmd = &cobra.Command{
@@ -256,8 +424,7 @@ var syncCmd = &cobra.Command{
 		}
 		p := tea.NewProgram(initialModel())
 
-		parser.ValidateRecipes()
-		parser.LoadRecipes()
+		// Load vault items/try to connect to 1password cli
 		var errorMessage string
 		vaultItems, errorMessage = vault.LoadVaultItems()
 		if errorMessage != "" {
@@ -265,32 +432,8 @@ var syncCmd = &cobra.Command{
 			os.Exit(0)
 		}
 
-		// Run single provider recipe
-		var r []recipeToExecute
-		sc := 0
-		if provider != "" {
-			for i := range vaultItems {
-				// Check if a recipe exists for the item
-				recipe := parser.GetRecipeForItem(vaultItems[i])
-				if recipe != nil && provider == recipe.Provider {
-					sc = len(recipe.Steps)
-					r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
-				}
-			}
-		} else {
-			// Run all recipes
-			for i := range vaultItems {
-				// Check if a recipe exists for the item
-				recipe := parser.GetRecipeForItem(vaultItems[i])
-				if recipe != nil {
-					sc = sc + len(recipe.Steps)
-					r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
-				}
-			}
-		}
-
 		// Run recipes
-		go runRecipes(p, r)
+		go runRecipes(p, provider, vaultItems)
 
 		if _, err := p.Run(); err != nil {
 			fmt.Println("Error running program:", err)

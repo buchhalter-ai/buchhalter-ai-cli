@@ -1,10 +1,11 @@
 package browser
 
 import (
+	"buchhalter/lib/archive"
 	"buchhalter/lib/parser"
+	"buchhalter/lib/utils"
 	"buchhalter/lib/vault"
 	"context"
-	"errors"
 	cu "github.com/Davincible/chromedp-undetected"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -14,42 +15,27 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
+	"io/fs"
 	"log"
-	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-var downloadsDirectory string
-var scriptID page.ScriptIdentifier
-var browserCtx context.Context
-var recipeTimeout = 10 * time.Second
-var textStyleBold = lipgloss.NewStyle().Bold(true).Render
+var (
+	downloadsDirectory string
+	documentsDirectory string
+	browserCtx         context.Context
+	recipeTimeout      = 60 * time.Second
+	textStyleBold      = lipgloss.NewStyle().Bold(true).Render
+	ChromeVersion      string
+	newFilesCount      = 0
+)
 
-type ResultProgressUpdate struct {
-	Percent float64
-}
-
-type ResultTitleAndDescriptionUpdate struct {
-	Title       string
-	Description string
-}
-
-type RecipeResult struct {
-	Status              string
-	StatusText          string
-	LastStepId          string
-	LastStepDescription string
-}
-
-func Init() {
-
-}
-
-func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, itemId string) RecipeResult {
+func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, itemId string) utils.RecipeResult {
 	//Load username, password, totp from vault
 	credentials := vault.GetCredentialsByItemId(itemId)
 
@@ -67,18 +53,16 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 	ctx, cancel = context.WithTimeout(ctx, 600*time.Second)
 	defer cancel()
 
-	// Set download directory for recipe
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	downloadsDirectory = filepath.Join(wd, ".tmp", "recipes", recipe.Provider)
-	// Create directory if not exists
-	if _, err := os.Stat(downloadsDirectory); errors.Is(err, os.ErrNotExist) {
-		err := os.MkdirAll(downloadsDirectory, os.ModePerm)
-		if err != nil {
-			log.Println(err)
-		}
+	// create download directories
+	downloadsDirectory, documentsDirectory = utils.InitProviderDirectories(recipe.Provider)
+
+	// get chrome version for metrics
+	if ChromeVersion == "" {
+		chromedp.Run(ctx, chromedp.Tasks{
+			chromedp.Navigate("chrome://version"),
+			chromedp.Text(`#version`, &ChromeVersion, chromedp.NodeVisible),
+		})
+		ChromeVersion = strings.TrimSpace(ChromeVersion)
 	}
 
 	chromedp.Run(ctx, chromedp.Tasks{
@@ -99,54 +83,84 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 
 	var cs float64
 	n := 1
-	var result RecipeResult
+	var result utils.RecipeResult
 	for _, step := range recipe.Steps {
-		c1 := make(chan bool, 1)
-		log.Printf("Downloading invoice from %s - step %d of %d", step.Action, n, scs)
-		p.Send(ResultTitleAndDescriptionUpdate{Title: "Downloading invoices from " + recipe.Provider + " (" + strconv.Itoa(n) + "/" + strconv.Itoa(scs) + "):", Description: step.Description})
+		sr := make(chan utils.StepResult, 1)
+		p.Send(utils.ResultTitleAndDescriptionUpdate{Title: "Downloading invoices from " + recipe.Provider + " (" + strconv.Itoa(n) + "/" + strconv.Itoa(scs) + "):", Description: step.Description})
 		/** Timeout recipe if something goes wrong */
 		go func() {
 			switch action := step.Action; action {
 			case "open":
-				stepOpen(ctx, step)
+				sr <- stepOpen(ctx, step)
 			case "click":
-				stepClick(ctx, step)
+				sr <- stepClick(ctx, step)
 			case "type":
-				stepType(ctx, step, credentials)
+				sr <- stepType(ctx, step, credentials)
 			case "sleep":
-				stepSleep(ctx, step)
+				sr <- stepSleep(ctx, step)
 			case "waitFor":
-				stepWaitFor(ctx, step)
+				sr <- stepWaitFor(ctx, step)
 			case "downloadAll":
-				stepDownloadAll(ctx, step)
+				sr <- stepDownloadAll(ctx, step)
+			case "transform":
+				sr <- stepTransform(ctx, step)
+			case "move":
+				sr <- stepMove(ctx, step)
 			case "runScript":
-				stepRunScript(ctx, step)
+				sr <- stepRunScript(ctx, step)
 			case "runScriptDownloadUrls":
-				stepRunScriptDownloadUrls(ctx, step)
+				sr <- stepRunScriptDownloadUrls(ctx, step)
 			}
-			c1 <- true
 		}()
 		select {
-		case _ = <-c1:
-			result = RecipeResult{
-				Status:              "success",
-				StatusText:          "- " + textStyleBold(recipe.Provider) + " finished successfully.",
-				LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
-				LastStepDescription: step.Description,
+		case lsr := <-sr:
+			newDocumentsText := strconv.Itoa(newFilesCount) + " new documents"
+			if newFilesCount == 1 {
+				newDocumentsText = "One new document"
+			}
+			if newFilesCount == 0 {
+				newDocumentsText = "No new documents"
+			}
+			if lsr.Status == "success" {
+				result = utils.RecipeResult{
+					Status:              "success",
+					StatusText:          recipe.Provider + ": " + newDocumentsText,
+					StatusTextFormatted: "- " + textStyleBold(recipe.Provider) + ": " + newDocumentsText,
+					LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
+					LastStepDescription: step.Description,
+					NewFilesCount:       newFilesCount,
+				}
+			} else {
+				result = utils.RecipeResult{
+					Status:              "error",
+					StatusText:          recipe.Provider + "aborted with error.",
+					StatusTextFormatted: "x " + textStyleBold(recipe.Provider) + " aborted with error.",
+					LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
+					LastStepDescription: step.Description,
+					LastErrorMessage:    lsr.Message,
+					NewFilesCount:       newFilesCount,
+				}
+				utils.TruncateDirectory(downloadsDirectory)
+				return result
 			}
 		case <-time.After(recipeTimeout):
-			result = RecipeResult{
+			result = utils.RecipeResult{
 				Status:              "error",
-				StatusText:          "x " + textStyleBold(recipe.Provider) + " aborted with timeout.",
+				StatusText:          recipe.Provider + " aborted with timeout.",
+				StatusTextFormatted: "x " + textStyleBold(recipe.Provider) + " aborted with timeout.",
 				LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
 				LastStepDescription: step.Description,
+				NewFilesCount:       newFilesCount,
 			}
+			utils.TruncateDirectory(downloadsDirectory)
 			return result
 		}
 		cs = (float64(bcs) + float64(n)) / float64(tsc)
-		p.Send(ResultProgressUpdate{Percent: cs})
+		p.Send(utils.ResultProgressUpdate{Percent: cs})
 		n++
 	}
+
+	utils.TruncateDirectory(downloadsDirectory)
 	return result
 }
 
@@ -156,7 +170,7 @@ func Quit() {
 	}
 }
 
-func stepOpen(ctx context.Context, step parser.Step) {
+func stepOpen(ctx context.Context, step parser.Step) utils.StepResult {
 	if err := chromedp.Run(ctx,
 		// navigate to the page
 		chromedp.Navigate(step.URL),
@@ -165,46 +179,51 @@ func stepOpen(ctx context.Context, step parser.Step) {
 			return nil
 		}),
 	); err != nil {
-		log.Fatal(err)
+		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
+	return utils.StepResult{Status: "success"}
 }
 
-func stepClick(ctx context.Context, step parser.Step) {
+func stepClick(ctx context.Context, step parser.Step) utils.StepResult {
 	if err := chromedp.Run(ctx,
 		chromedp.Click(step.Selector, chromedp.NodeReady),
 	); err != nil {
-		log.Fatal(err)
+		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
+	return utils.StepResult{Status: "success"}
 }
 
-func stepType(ctx context.Context, step parser.Step, credentials vault.Credentials) {
+func stepType(ctx context.Context, step parser.Step, credentials vault.Credentials) utils.StepResult {
 	step.Value = parseCredentialPlaceholders(step.Value, credentials)
 
 	if err := chromedp.Run(ctx,
 		chromedp.SendKeys(step.Selector, step.Value, chromedp.NodeReady),
 	); err != nil {
-		log.Fatal(err)
+		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
+	return utils.StepResult{Status: "success"}
 }
 
-func stepSleep(ctx context.Context, step parser.Step) {
+func stepSleep(ctx context.Context, step parser.Step) utils.StepResult {
 	seconds, _ := strconv.Atoi(step.Value)
 	if err := chromedp.Run(ctx,
 		chromedp.Sleep(time.Duration(seconds)*time.Second),
 	); err != nil {
-		log.Fatal(err)
+		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
+	return utils.StepResult{Status: "success"}
 }
 
-func stepWaitFor(ctx context.Context, step parser.Step) {
+func stepWaitFor(ctx context.Context, step parser.Step) utils.StepResult {
 	if err := chromedp.Run(ctx,
 		chromedp.WaitReady(step.Selector),
 	); err != nil {
-		log.Fatal(err)
+		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
+	return utils.StepResult{Status: "success"}
 }
 
-func stepDownloadAll(ctx context.Context, step parser.Step) {
+func stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	var nodes []*cdp.Node
 	selector := step.Selector
 	chromedp.Run(ctx, chromedp.Tasks{
@@ -228,7 +247,12 @@ func stepDownloadAll(ctx context.Context, step parser.Step) {
 	})
 
 	// Click on link (for client-side js stuff)
-	wg.Add(len(nodes))
+	// Limit nodes to 2 to prevent too many downloads at once/rate limiting
+	dl := len(nodes)
+	if dl > 2 {
+		dl = 2
+	}
+	wg.Add(dl)
 	x := 0
 	for _, n := range nodes {
 		if x >= 2 {
@@ -238,14 +262,97 @@ func stepDownloadAll(ctx context.Context, step parser.Step) {
 		if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
 			chromedp.MouseClickNode(n),
 		}); err != nil {
-			log.Fatal(err)
+			return utils.StepResult{Status: "error", Message: err.Error()}
 		}
 		// Delay clicks to prevent too many downloads at once/rate limiting
 		time.Sleep(1500 * time.Millisecond)
 		x++
 	}
 	wg.Wait()
+
 	log.Println("All downloads completed")
+	return utils.StepResult{Status: "success"}
+}
+
+func stepTransform(ctx context.Context, step parser.Step) utils.StepResult {
+	switch step.Value {
+	case "unzip":
+		for _, s := range utils.FindFiles(downloadsDirectory, ".zip") {
+			utils.UnzipFile(s, downloadsDirectory)
+		}
+	}
+	return utils.StepResult{Status: "success"}
+}
+
+func stepMove(ctx context.Context, step parser.Step) utils.StepResult {
+	var a []string
+	newFilesCount = 0
+	filepath.WalkDir(downloadsDirectory, func(s string, d fs.DirEntry, e error) error {
+		if e != nil {
+			return e
+		}
+		match, e := regexp.MatchString(step.Value, d.Name())
+		if match {
+			srcFile := filepath.Join(downloadsDirectory, d.Name())
+			//check if file already exists
+			if archive.FileExists(srcFile) == false {
+				newFilesCount++
+				utils.CopyFile(srcFile, filepath.Join(documentsDirectory, d.Name()))
+			}
+		}
+		return nil
+	})
+	for _, s := range a {
+		utils.UnzipFile(s, downloadsDirectory)
+	}
+	return utils.StepResult{Status: "success"}
+}
+
+func stepRunScript(ctx context.Context, step parser.Step) utils.StepResult {
+	var res []string
+	log.Println(`SCRIPT: ` + step.Value)
+	if err := chromedp.Run(ctx,
+		chromedp.Evaluate(step.Value, &res),
+	); err != nil {
+		return utils.StepResult{Status: "error", Message: err.Error()}
+	}
+	return utils.StepResult{Status: "success"}
+}
+
+func stepRunScriptDownloadUrls(ctx context.Context, step parser.Step) utils.StepResult {
+	var res []string
+	log.Println(`SCRIPT DOWNLOAD ARRAY: ` + step.Value)
+	chromedp.Evaluate(`Object.values(`+step.Value+`);`, &res)
+	for _, url := range res {
+		log.Println(`DOWNLOAD: ` + url)
+		if err := chromedp.Run(ctx,
+			browser.
+				SetDownloadBehavior(browser.SetDownloadBehaviorBehaviorAllowAndName).
+				WithDownloadPath(downloadsDirectory).
+				WithEventsEnabled(true),
+			chromedp.Navigate(url),
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				_ = waitForLoadEvent(ctx)
+				return nil
+			}),
+		); err != nil {
+			return utils.StepResult{Status: "error", Message: err.Error()}
+		}
+	}
+	return utils.StepResult{Status: "success"}
+}
+
+func parseCredentialPlaceholders(value string, credentials vault.Credentials) string {
+	if strings.Contains(value, "{{ username }}") {
+		value = strings.Replace(value, "{{ username }}", credentials.Username, -1)
+	}
+	if strings.Contains(value, "{{ password }}") {
+		value = strings.Replace(value, "{{ password }}", credentials.Password, -1)
+	}
+	if strings.Contains(value, "{{ totp }}") {
+		value = strings.Replace(value, "{{ totp }}", credentials.Totp, -1)
+	}
+	return value
 }
 
 func DisableImages(ctx context.Context) func(event interface{}) {
@@ -263,53 +370,6 @@ func DisableImages(ctx context.Context) func(event interface{}) {
 			}()
 		}
 	}
-}
-
-func stepRunScript(ctx context.Context, step parser.Step) {
-	var res []string
-	log.Println(`SCRIPT: ` + step.Value)
-	if err := chromedp.Run(ctx,
-		chromedp.Evaluate(step.Value, &res),
-	); err != nil {
-		log.Fatal(err)
-	} else {
-		log.Println(res)
-	}
-}
-
-func stepRunScriptDownloadUrls(ctx context.Context, step parser.Step) {
-	var res []string
-	log.Println(`SCRIPT DOWNLOAD ARRAY: ` + step.Value)
-	chromedp.Evaluate(`Object.values(`+step.Value+`);`, &res)
-	for _, url := range res {
-		log.Println(`DOWNLOAD: ` + url)
-		if err := chromedp.Run(ctx,
-			browser.
-				SetDownloadBehavior(browser.SetDownloadBehaviorBehaviorAllowAndName).
-				WithDownloadPath(downloadsDirectory).
-				WithEventsEnabled(true),
-			chromedp.Navigate(url),
-			chromedp.ActionFunc(func(ctx context.Context) error {
-				_ = waitForLoadEvent(ctx)
-				return nil
-			}),
-		); err != nil {
-			log.Fatal(err)
-		}
-	}
-}
-
-func parseCredentialPlaceholders(value string, credentials vault.Credentials) string {
-	if strings.Contains(value, "{{ username }}") {
-		value = strings.Replace(value, "{{ username }}", credentials.Username, -1)
-	}
-	if strings.Contains(value, "{{ password }}") {
-		value = strings.Replace(value, "{{ password }}", credentials.Password, -1)
-	}
-	if strings.Contains(value, "{{ totp }}") {
-		value = strings.Replace(value, "{{ totp }}", credentials.Totp, -1)
-	}
-	return value
 }
 
 func enableLifeCycleEvents() chromedp.ActionFunc {
@@ -344,12 +404,5 @@ func waitForLoadEvent(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	}
-}
-
-func fullScreenshot(urlstr string, quality int, res *[]byte) chromedp.Tasks {
-	return chromedp.Tasks{
-		chromedp.Navigate(urlstr),
-		chromedp.FullScreenshot(res, quality),
 	}
 }

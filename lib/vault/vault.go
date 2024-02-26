@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"github.com/spf13/viper"
 	"os/exec"
+	"strings"
 	"time"
 )
 
+var VaultVersion string
 var UrlsByItemId = make(map[string][]string)
 
 type Items []Item
@@ -56,6 +58,7 @@ type Item struct {
 }
 
 type Credentials struct {
+	Id       string
 	Username string
 	Password string
 	Totp     string
@@ -66,9 +69,18 @@ func LoadVaultItems() (Items, string) {
 	opCliCommand := viper.GetString("one_password_cli_command")
 	opBase := viper.GetString("one_password_base")
 	opTag := viper.GetString("one_password_tag")
+
+	//Retrive 1password cli version
+	version, err := exec.Command("bash", "-c", opCliCommand+" --version").Output()
+	if err != nil {
+		errorMessage = "Could not find out 1Password cli version. Install 1Password cli, first."
+		return nil, errorMessage
+	}
+	VaultVersion = strings.TrimSpace(string(version))
+
 	out, err := exec.Command("bash", "-c", opCliCommand+" item list --vault="+opBase+" --tags "+opTag+" --format json").Output()
 	if err != nil {
-		errorMessage = "Could not connect to 1Password vault. Please run `eval $(op signin)` first."
+		errorMessage = "Could not connect to 1Password vault. Open 1Password vault with `eval $(op signin)`, first."
 		return nil, errorMessage
 	}
 	var vaultItems Items
@@ -98,6 +110,7 @@ func GetCredentialsByItemId(itemId string) Credentials {
 		err = json.Unmarshal(out, &item)
 	}
 	var credentials Credentials
+	credentials.Id = itemId
 	credentials.Username = getValueByField(item, "username")
 	credentials.Password = getValueByField(item, "password")
 	credentials.Totp = getValueByField(item, "totp")
