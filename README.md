@@ -24,9 +24,10 @@ has the url field filled with the correct url of the supplier (e.g. the login ur
 Login to your 1password vault in the console with: ```eval $(op signin)```
 
 ### 3.**Sync**
-Sync your invoices with the buchhalter-ai API: ```go run main.go sync```
+Sync all latest invoices from all tagged suppliers in 1password to your local disk: 
+```go run main.go sync```
 
-Example: Load all invoices from Hetzner Cloud (using the default recipe from oicdb.org):
+Example: Load latest invoices from Hetzner Cloud only (using the default recipe from oicdb.org):
 ```
 go run main.go sync hetzner
 ```
