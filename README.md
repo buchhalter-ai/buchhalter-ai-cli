@@ -16,10 +16,15 @@ cd buchhalter-ai-cli
 ## Usage
 buchhalter-cli is a command line tool to interact with the buchhalter-ai API.
 
-1.**Tagging**: Tag all credentials you want to use in 1password with "buchhalter-ai" and make sure that every credential 
+### 1.**Tagging**
+Tag all credentials you want to use in 1password with "buchhalter-ai" and make sure that every credential 
 has the url field filled with the correct url of the supplier (e.g. the login url). 
-2.**Login** Login to your 1password vault in the console with: ```eval $(op signin)```
-3.**Sync** Sync your invoices with the buchhalter-ai API: ```go run main.go sync```
+
+### 2.**Login**
+Login to your 1password vault in the console with: ```eval $(op signin)```
+
+### 3.**Sync**
+Sync your invoices with the buchhalter-ai API: ```go run main.go sync```
 
 Example: Load all invoices from Hetzner Cloud (using the default recipe from oicdb.org):
 ```
@@ -44,10 +49,10 @@ We're looking forward to your contributions!
 1. buchhalter cli reads all tagged credentials from your 1password vault.
 2. buchhalter cli loads all recipes from the central open invoice collector database by default.
 3. buchhalter cli mapps credentials with recipes and uses the credentials to login to the suppliers website and download the invoices.
-4. Optional: Send anonymous usage data to the buchhalter-ai API to improve the recipes and the tool.
+4. Optional (when --dev mode not active): Send anonymous usage data to the buchhalter-ai API to improve the used recipes and the tool.
 
 ## Privacy
-1. buchhalter cli runs locally and will read tagged credentials from your 1password vault only. 
+1. buchhalter cli runs locally on your mac and will only read tagged credentials (username, password, url, 2FA-Code) from your 1password vault. 
 2. buchhalter cli will never write to your 1password vault.
 3. buchhalter cli will never store any credentials or data on your local machine.
 4. buchhalter cli loads recipes from the open invoice collector database by default.
