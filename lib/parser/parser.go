@@ -171,7 +171,7 @@ func getRecipeIndexByProvider(provider string) int {
 func GetRecipeForItem(item vault.Item) *Recipe {
 	// Build regex pattern with all urls from the vault item
 	var pattern string
-	for domain, _ := range RecipeProviderByDomain {
+	for domain := range RecipeProviderByDomain {
 		pattern = "^(https?://)?" + regexp.QuoteMeta(domain)
 
 		// Try to match all item urls with a recipe url (e.g. digitalocean login url) */
