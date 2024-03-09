@@ -11,13 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	cu "github.com/Davincible/chromedp-undetected"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/chromedp/cdproto/network"
-	"github.com/chromedp/cdproto/page"
-	"github.com/chromedp/chromedp"
-	"golang.org/x/net/html"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -27,6 +20,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	cu "github.com/Davincible/chromedp-undetected"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/chromedp"
+	"golang.org/x/net/html"
 )
 
 var (
@@ -70,7 +71,7 @@ func (s *loggingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, itemId string) utils.RecipeResult {
 	//Load username, password, totp from vault
 	credentials := vault.GetCredentialsByItemId(itemId)
-	
+
 	//Init directories
 	downloadsDirectory, documentsDirectory = utils.InitProviderDirectories(recipe.Provider)
 

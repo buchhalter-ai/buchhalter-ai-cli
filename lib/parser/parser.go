@@ -4,14 +4,15 @@ import (
 	"buchhalter/lib/vault"
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/viper"
-	"github.com/xeipuuv/gojsonschema"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/spf13/viper"
+	"github.com/xeipuuv/gojsonschema"
 )
 
 var OicdbVersion string
