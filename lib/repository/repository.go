@@ -68,7 +68,7 @@ func updateExists() (bool, error) {
 			return false, fmt.Errorf("update failed with checksum mismatch")
 		}
 	} else {
-		return false, fmt.Errorf("http request failed with status code: %d\n", resp.StatusCode)
+		return false, fmt.Errorf("http request failed with status code: %d", resp.StatusCode)
 	}
 }
 
@@ -102,15 +102,15 @@ func UpdateIfAvailable() error {
 		if resp.StatusCode == http.StatusOK {
 			out, err := os.Create(filepath.Join(viper.GetString("buchhalter_config_directory"), "oicdb.json"))
 			if err != nil {
-				return fmt.Errorf("couldn't create oicdb.json file: %w\n", err)
+				return fmt.Errorf("couldn't create oicdb.json file: %w", err)
 			}
 			defer out.Close()
 			_, err = io.Copy(out, resp.Body)
 			if err != nil {
-				return fmt.Errorf("error copying response body to file: %w\n", err)
+				return fmt.Errorf("error copying response body to file: %w", err)
 			}
 		} else {
-			return fmt.Errorf("http request failed with status code: %d\n", resp.StatusCode)
+			return fmt.Errorf("http request failed with status code: %d", resp.StatusCode)
 		}
 	}
 	return nil
@@ -151,7 +151,7 @@ func SendMetrics(rd RunData, v string, c string) {
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("Error sending request:", err)
-		fmt.Printf("Response status: %s\n", resp.Status)
+		fmt.Printf("Response status: %s", resp.Status)
 		return
 	}
 	defer resp.Body.Close()
@@ -159,7 +159,7 @@ func SendMetrics(rd RunData, v string, c string) {
 	if resp.StatusCode == http.StatusOK {
 		return
 	} else {
-		fmt.Printf("HTTP request failed with status code: %d\n", resp.StatusCode)
+		fmt.Printf("HTTP request failed with status code: %d", resp.StatusCode)
 		return
 	}
 }
