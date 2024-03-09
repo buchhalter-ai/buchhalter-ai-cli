@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/lipgloss v0.8.0
 	github.com/chromedp/cdproto v0.0.0-20230914224007-a15a36ccbc2e
 	github.com/chromedp/chromedp v0.9.2
-	github.com/google/uuid v1.3.1
+	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.16.0
 	github.com/xeipuuv/gojsonschema v1.2.0
