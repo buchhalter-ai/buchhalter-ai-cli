@@ -4,14 +4,15 @@ import (
 	"buchhalter/lib/vault"
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/viper"
-	"github.com/xeipuuv/gojsonschema"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/spf13/viper"
+	"github.com/xeipuuv/gojsonschema"
 )
 
 var OicdbVersion string
@@ -170,7 +171,7 @@ func getRecipeIndexByProvider(provider string) int {
 func GetRecipeForItem(item vault.Item) *Recipe {
 	// Build regex pattern with all urls from the vault item
 	var pattern string
-	for domain, _ := range RecipeProviderByDomain {
+	for domain := range RecipeProviderByDomain {
 		pattern = "^(https?://)?" + regexp.QuoteMeta(domain)
 
 		// Try to match all item urls with a recipe url (e.g. digitalocean login url) */

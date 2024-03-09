@@ -1,0 +1,55 @@
+name: Testing
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    - cron: "5 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  golangci:
+    name: Linting
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: false
+
+      - name: Run go fmt
+        if: runner.os != 'Windows'
+        run: diff -u <(echo -n) <(gofmt -d -s .)
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4.0.0
+        with:
+          version: v1.56.2
+          args: --disable staticcheck --enable errcheck,gosimple,govet,ineffassign,typecheck,unused,misspell
+
+      # golangci-lint contains only a set of rules from staticcheck.
+      # It's not the same thing as the staticcheck binary.
+      # Hence we deactivate it above and run it alone.
+      # See https://golangci-lint.run/usage/linters/#enabled-by-default
+      - name: Run staticcheck
+        uses: dominikh/staticcheck-action@v1.3.0
+        with:
+          version: "2023.1.7"
+
+  compile:
+    name: Compile application
+    runs-on: ubuntu-22.04
+    needs: [golangci]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build
+        run: go build -race -o buchhalter
