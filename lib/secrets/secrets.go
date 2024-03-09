@@ -89,7 +89,7 @@ func GetOauthAccessTokenFromCache(id string) (Oauth2Tokens, error) {
 			return tokens, nil
 		}
 	}
-	return tokens, fmt.Errorf("No tokens found for id %s", id)
+	return tokens, fmt.Errorf("no tokens found for id %s", id)
 }
 
 func readSecretsFile() secretFile {
