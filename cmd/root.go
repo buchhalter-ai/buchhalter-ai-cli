@@ -39,11 +39,9 @@ var (
 		textStyle("More information at: "),
 		textStyleBold("https://buchhalter.ai"),
 	)
-	configFile string
 )
 
 var textStyle = lipgloss.NewStyle().Render
-var textStyleGray = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render
 var textStyleGrayBold = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#666666")).Render
 var textStyleBold = lipgloss.NewStyle().Bold(true).Render
 var headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#9FC131")).Render
@@ -68,8 +66,15 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().BoolP("log", "l", false, "Log debug output")
 	rootCmd.PersistentFlags().BoolP("dev", "d", false, "Development mode without updates and sending metrics")
-	viper.BindPFlag("dev", rootCmd.PersistentFlags().Lookup("dev"))
-	viper.BindPFlag("log", rootCmd.PersistentFlags().Lookup("log"))
+	err := viper.BindPFlag("dev", rootCmd.PersistentFlags().Lookup("dev"))
+	if err != nil {
+		log.Fatalf("Failed to bind 'dev' flag: %v", err)
+	}
+
+	err = viper.BindPFlag("log", rootCmd.PersistentFlags().Lookup("log"))
+	if err != nil {
+		log.Fatalf("Failed to bind 'log' flag: %v", err)
+	}
 }
 
 func initConfig() {
@@ -111,7 +116,7 @@ func initConfig() {
 
 	// Log settings
 	lx, _ := rootCmd.Flags().GetBool("log")
-	if lx == true {
+	if lx {
 		fileName := filepath.Join(bd, "buchhalter-cli.log")
 		logFile, err := os.OpenFile(fileName, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {

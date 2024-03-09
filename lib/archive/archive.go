@@ -2,6 +2,7 @@ package archive
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"github.com/spf13/viper"
 	"io"
@@ -50,8 +51,10 @@ func computeHash(filePath string) (string, error) {
 
 	for {
 		n, err := file.Read(buf)
-		if err != nil && err != io.EOF {
-			return "", err
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return "", err
+			}
 		}
 		if n == 0 {
 			break

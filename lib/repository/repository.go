@@ -4,6 +4,7 @@ import (
 	"buchhalter/lib/parser"
 	"buchhalter/lib/vault"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/spf13/viper"
@@ -42,7 +43,8 @@ func updateExists() (bool, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	req, err := http.NewRequest("HEAD", repositoryUrl, nil)
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "HEAD", repositoryUrl, nil)
 	if err != nil {
 		return false, err
 	}
@@ -81,26 +83,32 @@ func UpdateIfAvailable() error {
 		client := &http.Client{
 			Timeout: 10 * time.Second,
 		}
-		req, err := http.NewRequest("GET", repositoryUrl, nil)
+		ctx := context.Background()
+		req, err := http.NewRequestWithContext(ctx, "GET", repositoryUrl, nil)
 		if err != nil {
-			return fmt.Errorf("error creating request: %s\n", err)
+			if err != nil {
+				return err
+			}
 		}
 		req.Header.Set("User-Agent", "buchhalter-cli")
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
 		resp, err := client.Do(req)
 		if err != nil {
-			return fmt.Errorf("error sending request: %s\n", err)
+			return err
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
 			out, err := os.Create(filepath.Join(viper.GetString("buchhalter_config_directory"), "oicdb.json"))
 			if err != nil {
-				return fmt.Errorf("couldn't create oicdb.json file: %s\n", err)
+				return fmt.Errorf("couldn't create oicdb.json file: %w\n", err)
 			}
 			defer out.Close()
-			io.Copy(out, resp.Body)
+			_, err = io.Copy(out, resp.Body)
+			if err != nil {
+				return fmt.Errorf("error copying response body to file: %w\n", err)
+			}
 		} else {
 			return fmt.Errorf("http request failed with status code: %d\n", resp.StatusCode)
 		}
@@ -111,6 +119,9 @@ func UpdateIfAvailable() error {
 func SendMetrics(rd RunData, v string, c string) {
 	metricsUrl := viper.GetString("buchhalter_metrics_url")
 	rdx, err := json.Marshal(rd)
+	if err != nil {
+		log.Fatal("Error marshalling run data:", err)
+	}
 	md := Metric{
 		MetricType:    "runMetrics",
 		Data:          string(rdx),
@@ -121,9 +132,14 @@ func SendMetrics(rd RunData, v string, c string) {
 		OS:            runtime.GOOS,
 	}
 	mdj, err := json.Marshal(md)
+	if err != nil {
+		log.Fatal("Error marshalling run data:", err)
+		return
+	}
 
 	client := &http.Client{}
-	req, err := http.NewRequest("POST", metricsUrl, bytes.NewBuffer(mdj))
+	ctx := context.Background() // Consider using a meaningful context
+	req, err := http.NewRequestWithContext(ctx, "POST", metricsUrl, bytes.NewBuffer(mdj))
 	if err != nil {
 		log.Println("Error creating request:", err)
 		return
@@ -135,7 +151,7 @@ func SendMetrics(rd RunData, v string, c string) {
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("Error sending request:", err)
-		fmt.Printf("%s", resp)
+		fmt.Printf("Response status: %s\n", resp.Status)
 		return
 	}
 	defer resp.Body.Close()

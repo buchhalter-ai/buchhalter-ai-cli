@@ -89,7 +89,7 @@ func (r resultMsg) String() string {
 	if r.duration == 0 {
 		if r.step != "" {
 			r.step = r.step + " " + strings.Repeat(".", maxWidth-1-s)
-			return fmt.Sprintf("%s", r.step)
+			return r.step
 		}
 		return dotStyle.Render(strings.Repeat(".", maxWidth))
 	}
@@ -129,7 +129,7 @@ func init() {
 }
 
 func quit(m model) model {
-	if m.hasError == true {
+	if m.hasError {
 		m.currentAction = "ERROR while running recipes!"
 		m.quitting = true
 		m.showProgress = false
@@ -258,7 +258,7 @@ func (m model) View() string {
 		textStyleGrayBold("Using OICDB "+parser.OicdbVersion+" and CLI "+CliVersion),
 	) + "\n"
 
-	if m.hasError == false {
+	if !m.hasError {
 		s += m.spinner.View() + m.currentAction
 		s += helpStyle.Render("  " + m.details)
 	} else {
@@ -268,11 +268,11 @@ func (m model) View() string {
 
 	s += "\n"
 
-	if m.showProgress == true {
+	if m.showProgress {
 		s += m.progress.View() + "\n\n"
 	}
 
-	if m.hasError == false && m.mode == "sync" {
+	if !m.hasError && m.mode == "sync" {
 		for _, res := range m.results {
 			s += res.String() + "\n"
 		}
@@ -303,7 +303,7 @@ func (m model) View() string {
 
 func sendMetrics(a bool) {
 	repository.SendMetrics(RunData, CliVersion, ChromeVersion)
-	if a == true {
+	if a {
 		viper.Set("buchhalter_always_send_metrics", true)
 		_ = viper.WriteConfig()
 	}
@@ -314,7 +314,7 @@ func runRecipes(p *tea.Program, provider string, vaultItems []vault.Item) {
 	p.Send(resultStatusUpdate{title: t})
 	archive.BuildArchiveIndex()
 
-	if viper.GetBool("dev") == false {
+	if !viper.GetBool("dev") {
 		t = "Checking for repository updates"
 		p.Send(resultStatusUpdate{title: t})
 		err := repository.UpdateIfAvailable()
@@ -369,10 +369,10 @@ func runRecipes(p *tea.Program, provider string, vaultItems []vault.Item) {
 		bcs += scs
 	}
 
-	if viper.GetBool("buchhalter_always_send_metrics") == true {
+	if viper.GetBool("buchhalter_always_send_metrics") {
 		repository.SendMetrics(RunData, CliVersion, ChromeVersion)
 		p.Send(quitMsg{})
-	} else if viper.GetBool("dev") == true {
+	} else if viper.GetBool("dev") {
 		p.Send(quitMsg{})
 	} else {
 		p.Send(resultModeUpdate{
@@ -394,7 +394,6 @@ func prepareRecipes(provider string, vaultItems []vault.Item) []recipeToExecute 
 			// Check if a recipe exists for the item
 			recipe := parser.GetRecipeForItem(vaultItems[i])
 			if recipe != nil && provider == recipe.Provider {
-				sc = len(recipe.Steps)
 				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
 			}
 		}

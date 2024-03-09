@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -83,7 +82,6 @@ func ValidateRecipes() bool {
 		}
 		return false
 	}
-	return true
 }
 
 func LoadRecipes() bool {
@@ -96,11 +94,14 @@ func LoadRecipes() bool {
 	defer dbFile.Close()
 	byteValue, _ := io.ReadAll(dbFile)
 
-	json.Unmarshal(byteValue, &db)
+	err = json.Unmarshal(byteValue, &db)
+	if err != nil {
+		log.Fatal(err)
+	}
 	OicdbVersion = db.Version
 
 	/** Create local recipes directory if not exists */
-	if viper.GetBool("dev") == true {
+	if viper.GetBool("dev") {
 		OicdbVersion = OicdbVersion + "-dev"
 		loadLocalRecipes()
 	}
@@ -126,7 +127,7 @@ func loadLocalRecipes() {
 	}
 
 	/** Load local recipes */
-	files, err := ioutil.ReadDir(recipesDir)
+	files, err := os.ReadDir(recipesDir) // Replace ioutil.ReadDir with os.ReadDir
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -140,7 +141,10 @@ func loadLocalRecipes() {
 			fmt.Println(err)
 		}
 		defer recipeFile.Close()
-		byteValue, _ := io.ReadAll(recipeFile)
+		byteValue, err := io.ReadAll(recipeFile)
+		if err != nil {
+			log.Fatal(err)
+		}
 		n := getRecipeIndexByProvider(filenameWithoutExtension)
 		if n >= 0 {
 			/** Replace recipe if exists */
@@ -153,7 +157,10 @@ func loadLocalRecipes() {
 		} else {
 			/** Add recipe if not exists */
 			var recipe Recipe
-			json.Unmarshal(byteValue, &recipe)
+			err = json.Unmarshal(byteValue, &recipe)
+			if err != nil {
+				log.Fatal(err)
+			}
 			db.Recipes = append(db.Recipes, recipe)
 		}
 	}

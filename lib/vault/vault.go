@@ -2,8 +2,8 @@ package vault
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/spf13/viper"
+	"log"
 	"os/exec"
 	"strings"
 	"time"
@@ -70,7 +70,8 @@ func LoadVaultItems() (Items, string) {
 	opBase := viper.GetString("one_password_base")
 	opTag := viper.GetString("one_password_tag")
 
-	//Retrive 1password cli version
+	// Retrieve 1password cli version
+	// #nosec G204
 	version, err := exec.Command("bash", "-c", opCliCommand+" --version").Output()
 	if err != nil {
 		errorMessage = "Could not find out 1Password cli version. Install 1Password cli, first."
@@ -78,6 +79,7 @@ func LoadVaultItems() (Items, string) {
 	}
 	VaultVersion = strings.TrimSpace(string(version))
 
+	// #nosec G204
 	out, err := exec.Command("bash", "-c", opCliCommand+" item list --vault="+opBase+" --tags "+opTag+" --format json").Output()
 	if err != nil {
 		errorMessage = "Could not connect to 1Password vault. Open 1Password vault with `eval $(op signin)`, first."
@@ -86,7 +88,7 @@ func LoadVaultItems() (Items, string) {
 	var vaultItems Items
 	err = json.Unmarshal(out, &vaultItems)
 	if err != nil {
-		errorMessage = "Error while reading 1password logins with buchhalter-ai-tag." + fmt.Sprintf("%s", err.Error())
+		errorMessage = "Error while reading 1password logins with buchhalter-ai-tag. " + err.Error()
 		return nil, errorMessage
 	}
 
@@ -104,10 +106,14 @@ func LoadVaultItems() (Items, string) {
 func GetCredentialsByItemId(itemId string) Credentials {
 	opCliCommand := viper.GetString("one_password_cli_command")
 	opBase := viper.GetString("one_password_base")
+	// #nosec G204
 	out, err := exec.Command("bash", "-c", opCliCommand+" item get "+itemId+" --vault="+opBase+" --format json").Output()
 	var item Item
 	if err == nil {
 		err = json.Unmarshal(out, &item)
+		if err != nil {
+			log.Fatal("Error while reading 1password logins with buchhalter-ai-tag. " + err.Error())
+		}
 	}
 	var credentials Credentials
 	credentials.Id = itemId

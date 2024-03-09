@@ -58,14 +58,17 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 
 	// get chrome version for metrics
 	if ChromeVersion == "" {
-		chromedp.Run(ctx, chromedp.Tasks{
+		err := chromedp.Run(ctx, chromedp.Tasks{
 			chromedp.Navigate("chrome://version"),
 			chromedp.Text(`#version`, &ChromeVersion, chromedp.NodeVisible),
 		})
+		if err != nil {
+			log.Fatal(err)
+		}
 		ChromeVersion = strings.TrimSpace(ChromeVersion)
 	}
 
-	chromedp.Run(ctx, chromedp.Tasks{
+	err = chromedp.Run(ctx, chromedp.Tasks{
 		browser.
 			SetDownloadBehavior(browser.SetDownloadBehaviorBehaviorAllow).
 			WithDownloadPath(downloadsDirectory).
@@ -76,10 +79,14 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 		}),
 	})
 
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// Disable downloading images for performance reasons
 	chromedp.ListenTarget(ctx, DisableImages(ctx))
 
-	enableLifeCycleEvents()
+	_ = enableLifeCycleEvents()
 
 	var cs float64
 	n := 1
@@ -226,10 +233,13 @@ func stepWaitFor(ctx context.Context, step parser.Step) utils.StepResult {
 func stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	var nodes []*cdp.Node
 	selector := step.Selector
-	chromedp.Run(ctx, chromedp.Tasks{
+	err := chromedp.Run(ctx, chromedp.Tasks{
 		chromedp.WaitReady(selector),
 		chromedp.Nodes(selector, &nodes),
 	})
+	if err != nil {
+		return utils.StepResult{Status: "error", Message: err.Error()}
+	}
 
 	wg := &sync.WaitGroup{}
 	chromedp.ListenTarget(ctx, func(v interface{}) {
@@ -278,7 +288,10 @@ func stepTransform(ctx context.Context, step parser.Step) utils.StepResult {
 	switch step.Value {
 	case "unzip":
 		for _, s := range utils.FindFiles(downloadsDirectory, ".zip") {
-			utils.UnzipFile(s, downloadsDirectory)
+			err := utils.UnzipFile(s, downloadsDirectory)
+			if err != nil {
+				return utils.StepResult{Status: "error", Message: err.Error()}
+			}
 		}
 	}
 	return utils.StepResult{Status: "success"}
@@ -287,23 +300,35 @@ func stepTransform(ctx context.Context, step parser.Step) utils.StepResult {
 func stepMove(ctx context.Context, step parser.Step) utils.StepResult {
 	var a []string
 	newFilesCount = 0
-	filepath.WalkDir(downloadsDirectory, func(s string, d fs.DirEntry, e error) error {
+	err := filepath.WalkDir(downloadsDirectory, func(s string, d fs.DirEntry, e error) error {
 		if e != nil {
 			return e
 		}
 		match, e := regexp.MatchString(step.Value, d.Name())
+		if e != nil {
+			return e
+		}
 		if match {
 			srcFile := filepath.Join(downloadsDirectory, d.Name())
 			//check if file already exists
-			if archive.FileExists(srcFile) == false {
+			if !archive.FileExists(srcFile) {
 				newFilesCount++
-				utils.CopyFile(srcFile, filepath.Join(documentsDirectory, d.Name()))
+				_, err := utils.CopyFile(srcFile, filepath.Join(documentsDirectory, d.Name()))
+				if err != nil {
+					return err
+				}
 			}
 		}
 		return nil
 	})
+	if err != nil {
+		return utils.StepResult{Status: "error", Message: err.Error()}
+	}
 	for _, s := range a {
-		utils.UnzipFile(s, downloadsDirectory)
+		err = utils.UnzipFile(s, downloadsDirectory)
+		if err != nil {
+			return utils.StepResult{Status: "error", Message: "Error while unzipping file: " + err.Error()}
+		}
 	}
 	return utils.StepResult{Status: "success"}
 }
@@ -343,15 +368,9 @@ func stepRunScriptDownloadUrls(ctx context.Context, step parser.Step) utils.Step
 }
 
 func parseCredentialPlaceholders(value string, credentials vault.Credentials) string {
-	if strings.Contains(value, "{{ username }}") {
-		value = strings.Replace(value, "{{ username }}", credentials.Username, -1)
-	}
-	if strings.Contains(value, "{{ password }}") {
-		value = strings.Replace(value, "{{ password }}", credentials.Password, -1)
-	}
-	if strings.Contains(value, "{{ totp }}") {
-		value = strings.Replace(value, "{{ totp }}", credentials.Totp, -1)
-	}
+	value = strings.Replace(value, "{{ username }}", credentials.Username, -1)
+	value = strings.Replace(value, "{{ password }}", credentials.Password, -1)
+	value = strings.Replace(value, "{{ totp }}", credentials.Totp, -1)
 	return value
 }
 
@@ -363,9 +382,17 @@ func DisableImages(ctx context.Context) func(event interface{}) {
 				c := chromedp.FromContext(ctx)
 				ctx := cdp.WithExecutor(ctx, c.Target)
 				if ev.ResourceType == network.ResourceTypeImage {
-					fetch.FailRequest(ev.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
+					err := fetch.FailRequest(ev.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
+					if err != nil {
+						log.Printf("Failed to block image request: %v", err)
+						return
+					}
 				} else {
-					fetch.ContinueRequest(ev.RequestID).Do(ctx)
+					err := fetch.ContinueRequest(ev.RequestID).Do(ctx)
+					if err != nil {
+						log.Printf("Failed to continue request: %v", err)
+						return
+					}
 				}
 			}()
 		}

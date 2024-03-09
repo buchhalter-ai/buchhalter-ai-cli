@@ -72,7 +72,7 @@ func TruncateDirectory(path string) {
 
 func FindFiles(root, ext string) []string {
 	var a []string
-	filepath.WalkDir(root, func(s string, d fs.DirEntry, e error) error {
+	err := filepath.WalkDir(root, func(s string, d fs.DirEntry, e error) error {
 		if e != nil {
 			return e
 		}
@@ -81,6 +81,11 @@ func FindFiles(root, ext string) []string {
 		}
 		return nil
 	})
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return a
 }
 
@@ -123,14 +128,18 @@ func UnzipFile(source, dest string) error {
 		if err != nil {
 			return err
 		}
-		name := path.Join(dest, file.Name)
-		os.MkdirAll(path.Dir(name), os.ModeDir)
+		// Sanitize the filename to prevent path traversal
+		name := filepath.Join(dest, filepath.Base(file.Name))
+		CreateDirectoryIfNotExists(path.Dir(name))
 		create, err := os.Create(name)
 		if err != nil {
 			return err
 		}
 		defer create.Close()
-		create.ReadFrom(open)
+		_, err = create.ReadFrom(open)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

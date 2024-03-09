@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/spf13/viper"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -61,7 +62,7 @@ func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens) {
 	}
 
 	// Add secret
-	if f == false {
+	if !f {
 		sfn := secretFileEntry{
 			Id:     id,
 			Tokens: t,
@@ -96,7 +97,7 @@ func readSecretsFile() secretFile {
 	bd := viper.GetString("buchhalter_config_directory")
 	sef := filepath.Join(bd, secretsFilename)
 	if _, err := os.Stat(sef); os.IsNotExist(err) {
-		err = os.WriteFile(filepath.Join(bd, secretsFilename), nil, 0644)
+		err = os.WriteFile(filepath.Join(bd, secretsFilename), nil, 0600)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -109,7 +110,10 @@ func readSecretsFile() secretFile {
 		defer sf.Close()
 
 		byteValue, _ := io.ReadAll(sf)
-		json.Unmarshal(byteValue, &sfe)
+		err = json.Unmarshal(byteValue, &sfe)
+		if err != nil {
+			log.Fatal(err)
+		}
 		return sfe
 	}
 }
@@ -121,7 +125,7 @@ func writeSecretsFile(sfe secretFile) {
 	}
 
 	bd := viper.GetString("buchhalter_config_directory")
-	err = os.WriteFile(filepath.Join(bd, secretsFilename), sfj, 0644)
+	err = os.WriteFile(filepath.Join(bd, secretsFilename), sfj, 0600)
 	if err != nil {
 		fmt.Println(err)
 	}
