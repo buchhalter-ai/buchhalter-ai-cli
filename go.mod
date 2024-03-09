@@ -6,7 +6,7 @@ require (
 	github.com/Davincible/chromedp-undetected v1.3.8
 	github.com/charmbracelet/bubbles v0.16.1
 	github.com/charmbracelet/bubbletea v0.24.2
-	github.com/charmbracelet/lipgloss v0.8.0
+	github.com/charmbracelet/lipgloss v0.10.0
 	github.com/chromedp/cdproto v0.0.0-20230914224007-a15a36ccbc2e
 	github.com/chromedp/chromedp v0.9.2
 	github.com/google/uuid v1.3.1
@@ -41,7 +41,7 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.1.0 // indirect
-	github.com/rivo/uniseg v0.4.4 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/afero v1.9.5 // indirect
 	github.com/spf13/cast v1.5.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
