@@ -6,14 +6,15 @@ package cmd
 import (
 	"buchhalter/lib/utils"
 	"fmt"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/google/uuid"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/google/uuid"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -104,6 +105,7 @@ func initConfig() {
 		}
 	}
 	viper.SetConfigFile(cf)
+
 	// Initialize viper config
 	err := viper.ReadInConfig()
 	if err != nil {
