@@ -6,7 +6,7 @@ help: ## Outputs the help
 
 .PHONY: build
 build: ## Compiles the application
-	go build -o bin/buchhalter main.go
+	go build -race -o bin/buchhalter main.go
 
 .PHONY: sync
 sync: ## Synchronize all invoices from your suppliers
