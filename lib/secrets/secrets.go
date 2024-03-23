@@ -3,12 +3,13 @@ package secrets
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/viper"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 var secretsFilename string = ".secrets.json"

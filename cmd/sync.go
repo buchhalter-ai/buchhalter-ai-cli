@@ -7,17 +7,19 @@ import (
 	"buchhalter/lib/repository"
 	"buchhalter/lib/utils"
 	"fmt"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/viper"
-	"os"
-	"strings"
-	"time"
 
 	"buchhalter/lib/parser"
 	"buchhalter/lib/vault"
+
 	"github.com/spf13/cobra"
 )
 
@@ -95,8 +97,7 @@ func (r resultMsg) String() string {
 	}
 	d := r.duration.Round(time.Second).String()
 	fill := strings.Repeat(".", maxWidth-1-s-(len(d)-8))
-	return fmt.Sprintf("%s %s%s", r.step, fill,
-		durationStyle.Render(d))
+	return fmt.Sprintf("%s %s%s", r.step, fill, durationStyle.Render(d))
 }
 
 func (m model) Init() tea.Cmd {
@@ -107,6 +108,7 @@ func (m model) Init() tea.Cmd {
 
 func initialModel() model {
 	const numLastResults = 5
+
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = spinnerStyle

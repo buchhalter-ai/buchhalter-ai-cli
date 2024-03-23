@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/viper"
 	"io"
 	"log"
 	"net/http"
@@ -15,6 +14,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 type Metric struct {

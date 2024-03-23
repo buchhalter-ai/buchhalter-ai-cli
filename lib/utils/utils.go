@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/spf13/viper"
 	"io"
 	"io/fs"
 	"log"
@@ -16,6 +15,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/spf13/viper"
 )
 
 var (

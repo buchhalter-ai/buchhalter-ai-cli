@@ -2,11 +2,12 @@ package vault
 
 import (
 	"encoding/json"
-	"github.com/spf13/viper"
 	"log"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 var VaultVersion string
