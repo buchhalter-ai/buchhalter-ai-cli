@@ -5,3 +5,6 @@
 .tmp
 data
 main
+
+# Binary
+bin/buchhalter
