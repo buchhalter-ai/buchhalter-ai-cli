@@ -15,3 +15,7 @@ sync: ## Synchronize all invoices from your suppliers
 .PHONY: run
 run: ## Runs the application via the standard go tooling
 	go run main.go
+
+.PHONY: test
+test: ## Runs all unit tests
+	go test -v -race ./...
