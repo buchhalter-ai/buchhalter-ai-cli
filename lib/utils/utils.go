@@ -19,6 +19,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+const (
+	randomStringCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+)
+
 var (
 	downloadsDirectory string
 	documentsDirectory string
@@ -146,12 +150,15 @@ func UnzipFile(source, dest string) error {
 }
 
 func RandomString(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyz" +
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	if length == 0 {
+		return ""
+	}
+
+	maxRandInt := big.NewInt(int64(len(randomStringCharset)))
 	var result []byte
 	for i := 0; i < length; i++ {
-		index, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		result = append(result, charset[index.Int64()])
+		index, _ := rand.Int(rand.Reader, maxRandInt)
+		result = append(result, randomStringCharset[index.Int64()])
 	}
 
 	return encode(result)[:length]
