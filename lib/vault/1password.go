@@ -170,7 +170,7 @@ Please read "Sign in to 1Password CLI" at https://developer.1password.com/docs/c
 		message = fmt.Sprintf(message, err)
 
 	case CommandExecutionError:
-		message = `An error occured while executing a command:
+		message = `An error occurred while executing a command:
 %+v`
 		message = fmt.Sprintf(message, err)
 	}

@@ -91,7 +91,7 @@ type ProviderResponseParsingError struct {
 }
 
 func (e ProviderResponseParsingError) Error() string {
-	return fmt.Sprintf("Error %d reading password vault responce\"%s\": %s", e.Code, e.Cmd, e.Err.Error())
+	return fmt.Sprintf("Error %d reading password vault response\"%s\": %s", e.Code, e.Cmd, e.Err.Error())
 }
 
 type CommandExecutionError struct {
