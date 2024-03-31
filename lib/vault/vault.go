@@ -2,12 +2,20 @@ package vault
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/viper"
+)
+
+const (
+	BINARY_NAME_1PASSWORD = "op"
 )
 
 var VaultVersion string
@@ -134,4 +142,44 @@ func getValueByField(item Item, fieldName string) string {
 		}
 	}
 	return ""
+}
+
+// DetermineBinary determines the binary to use for the 1Password CLI.
+// If the binaryPath is set, it will check if the binary exists and is executable.
+// If the binaryPath is empty, it will try to find the binary using the which command.
+func DetermineBinary(binaryPath string) (string, error) {
+	var err error
+
+	// Configured binary
+	fullBinaryPath := strings.TrimSpace(binaryPath)
+	if len(fullBinaryPath) > 0 {
+		fullBinaryPath, err = filepath.Abs(binaryPath)
+		if err != nil {
+			return "", err
+		}
+
+		if _, err := os.Stat(fullBinaryPath); errors.Is(err, os.ErrNotExist) {
+			err = fmt.Errorf("could not find executable \"%s\"", fullBinaryPath)
+			return "", err
+		}
+
+		// TODO Check if fullBinaryPath is executable
+
+		return fullBinaryPath, nil
+	}
+
+	// Find binary
+	// TODO Check if this works on Windows or if we need to limit it to Linux and macOS
+	whichOutput, err := exec.Command("which", BINARY_NAME_1PASSWORD).Output()
+	if err != nil {
+		return "", err
+	}
+
+	foundBinary := string(whichOutput)
+	if len(foundBinary) == 0 {
+		err = fmt.Errorf("could not find executable \"%s\" for 1Password CLI", BINARY_NAME_1PASSWORD)
+		return "", err
+	}
+
+	return foundBinary, nil
 }
