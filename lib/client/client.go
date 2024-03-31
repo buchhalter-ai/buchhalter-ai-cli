@@ -50,10 +50,7 @@ type HiddenInputFields struct {
 	Fields map[string]string
 }
 
-func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, itemId string) utils.RecipeResult {
-	//Load username, password, totp from vault
-	credentials := vault.GetCredentialsByItemId(itemId)
-
+func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials) utils.RecipeResult {
 	//Init directories
 	downloadsDirectory, documentsDirectory = utils.InitProviderDirectories(recipe.Provider)
 
@@ -160,7 +157,7 @@ func stepOauth2Setup(step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success", Message: "Successfully set up OAuth2 settings."}
 }
 
-func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials vault.Credentials) utils.StepResult {
+func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials) utils.StepResult {
 	// Try to get secrets from cache
 	pii := recipe.Provider + "|" + credentials.Id
 	tokens, err := secrets.GetOauthAccessTokenFromCache(pii)
@@ -186,7 +183,7 @@ func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step pars
 	return utils.StepResult{Status: "error", Message: "No access token found. New OAuth2 login needed."}
 }
 
-func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials vault.Credentials) utils.StepResult {
+func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials) utils.StepResult {
 	if len(oauth2AuthToken) > 0 {
 		return utils.StepResult{Status: "success"}
 	}

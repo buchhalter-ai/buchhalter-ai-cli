@@ -4,144 +4,145 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/spf13/viper"
-)
-
-const (
-	BINARY_NAME_1PASSWORD = "op"
 )
 
 var VaultVersion string
-var UrlsByItemId = make(map[string][]string)
 
-type Items []Item
+type Provider1Password struct {
+	binary string
+	base   string
+	tag    string
 
-type Item struct {
-	ID      string   `json:"id"`
-	Title   string   `json:"title"`
-	Tags    []string `json:"tags"`
-	Version int      `json:"version"`
-	Vault   struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	} `json:"vault"`
-	Category              string    `json:"category"`
-	LastEditedBy          string    `json:"last_edited_by"`
-	CreatedAt             time.Time `json:"created_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
-	AdditionalInformation string    `json:"additional_information"`
-	Urls                  []struct {
-		Label   string `json:"label"`
-		Primary bool   `json:"primary,omitempty"`
-		Href    string `json:"href"`
-	} `json:"urls"`
-	Sections []struct {
-		ID    string `json:"id"`
-		Label string `json:"label,omitempty"`
-	} `json:"sections"`
-	Fields []struct {
-		ID              string  `json:"id"`
-		Type            string  `json:"type"`
-		Purpose         string  `json:"purpose,omitempty"`
-		Label           string  `json:"label"`
-		Value           string  `json:"value"`
-		Reference       string  `json:"reference"`
-		Entropy         float64 `json:"entropy,omitempty"`
-		PasswordDetails struct {
-			Entropy   int    `json:"entropy"`
-			Generated bool   `json:"generated"`
-			Strength  string `json:"strength"`
-		} `json:"password_details,omitempty"`
-		Section struct {
-			ID string `json:"id"`
-		} `json:"section,omitempty"`
-		Totp string `json:"totp,omitempty"`
-	} `json:"fields"`
+	Version    string
+	VaultItems Items
+
+	// TODO Check if this is needed
+	UrlsByItemId map[string][]string
 }
 
-type Credentials struct {
-	Id       string
-	Username string
-	Password string
-	Totp     string
+func GetProvider(provider, binary, base, tag string) (*Provider1Password, error) {
+	switch provider {
+	case PROVIDER_1PASSWORD:
+		return New1PasswordProvider(binary, base, tag)
+	}
+
+	return nil, fmt.Errorf("provider %s not supported", provider)
 }
 
-func LoadVaultItems() (Items, string) {
-	errorMessage := ""
-	opCliCommand := viper.GetString("one_password_cli_command")
-	opBase := viper.GetString("one_password_base")
-	opTag := viper.GetString("one_password_tag")
-
-	// Retrieve 1password cli version
-	// #nosec G204
-	version, err := exec.Command("bash", "-c", opCliCommand+" --version").Output()
+func New1PasswordProvider(binary, base, tag string) (*Provider1Password, error) {
+	binaryPath, err := DetermineBinary(binary)
 	if err != nil {
-		errorMessage = "Could not find out 1Password cli version. Install 1Password cli, first."
-		return nil, errorMessage
+		return nil, err
 	}
-	VaultVersion = strings.TrimSpace(string(version))
 
-	// #nosec G204
-	out, err := exec.Command("bash", "-c", opCliCommand+" item list --vault="+opBase+" --tags "+opTag+" --format json").Output()
-	if err != nil {
-		errorMessage = "Could not connect to 1Password vault. Open 1Password vault with `eval $(op signin)`, first."
-		return nil, errorMessage
+	p := &Provider1Password{
+		binary: binaryPath,
+		base:   base,
+		tag:    tag,
+
+		UrlsByItemId: make(map[string][]string),
 	}
+	err = p.initializeVaultversion()
+
+	return p, err
+}
+
+func (p *Provider1Password) initializeVaultversion() error {
+	// Retrieve CLI version
+	// #nosec G204
+	version, err := exec.Command(p.binary, "--version").Output()
+	if err != nil {
+		// TODO Create custome error
+		// "Could not find out 1Password cli version. Install 1Password cli, first."
+		err = fmt.Errorf("error while executing %s --version: %+v", p.binary, err)
+		return err
+	}
+	p.Version = strings.TrimSpace(string(version))
+
+	// TODO Remove global variable VaultVersion
+	// Kept for legacy reasons (sendMetrics)
+	VaultVersion = p.Version
+
+	return nil
+}
+
+func (p *Provider1Password) LoadVaultItems() (Items, error) {
+	// Build item list command
+	// #nosec G204
+	cmdArgs := p.buildVaultCommandArguments([]string{"item", "list"}, true)
+	itemListResponse, err := exec.Command(p.binary, cmdArgs...).Output()
+	if err != nil {
+		// TODO set correct error message
+		//  "Could not connect to 1Password vault. Open 1Password vault with `eval $(op signin)`, first."
+		err = errors.New("could not connect to password vault")
+		return nil, err
+	}
+
 	var vaultItems Items
-	err = json.Unmarshal(out, &vaultItems)
+	err = json.Unmarshal(itemListResponse, &vaultItems)
 	if err != nil {
-		errorMessage = "Error while reading 1password logins with buchhalter-ai-tag. " + err.Error()
-		return nil, errorMessage
+		// TODO set correct error message: "Error while reading 1password logins with buchhalter-ai-tag. " + err.Error()
+		err := fmt.Errorf("error while reading 1Password items: %+v", err)
+		return nil, err
 	}
 
-	/** Read in all urls from a vault item and build up urls per item id map */
+	// Read in all urls from a vault item and build up urls per item id map
+	// TODO Check if this is really needed
 	for n := 0; n < len(vaultItems); n++ {
 		var urls []string
 		for i := 0; i < len(vaultItems[n].Urls); i++ {
 			urls = append(urls, vaultItems[n].Urls[i].Href)
 		}
-		UrlsByItemId[vaultItems[n].ID] = urls
+		p.UrlsByItemId[vaultItems[n].ID] = urls
 	}
-	return vaultItems, errorMessage
+
+	p.VaultItems = vaultItems
+
+	return vaultItems, nil
 }
 
-func GetCredentialsByItemId(itemId string) Credentials {
-	opCliCommand := viper.GetString("one_password_cli_command")
-	opBase := viper.GetString("one_password_base")
+func (p Provider1Password) GetCredentialsByItemId(itemId string) (*Credentials, error) {
+	cmdArgs := p.buildVaultCommandArguments([]string{"item", "get", itemId}, false)
+
 	// #nosec G204
-	out, err := exec.Command("bash", "-c", opCliCommand+" item get "+itemId+" --vault="+opBase+" --format json").Output()
-	var item Item
-	if err == nil {
-		err = json.Unmarshal(out, &item)
-		if err != nil {
-			log.Fatal("Error while reading 1password logins with buchhalter-ai-tag. " + err.Error())
-		}
+	itemGetResponse, err := exec.Command(p.binary, cmdArgs...).Output()
+	if err != nil {
+		return nil, err
 	}
-	var credentials Credentials
-	credentials.Id = itemId
-	credentials.Username = getValueByField(item, "username")
-	credentials.Password = getValueByField(item, "password")
-	credentials.Totp = getValueByField(item, "totp")
-	return credentials
+
+	var item Item
+	err = json.Unmarshal(itemGetResponse, &item)
+	if err != nil {
+		// TODO set correct error message: Error while reading 1password logins with buchhalter-ai-tag. " + err.Error())
+		err = fmt.Errorf("reading 1password login with buchhalter-ai-tag failed: %+v", err)
+		return nil, err
+	}
+
+	credentials := &Credentials{
+		Id:       itemId,
+		Username: getValueByField(item, "username"),
+		Password: getValueByField(item, "password"),
+		Totp:     getValueByField(item, "totp"),
+	}
+
+	return credentials, nil
 }
 
-func getValueByField(item Item, fieldName string) string {
-	for n := 0; n < len(item.Fields); n++ {
-		if item.Fields[n].Type == "OTP" && fieldName == "totp" {
-			return item.Fields[n].Totp
-		}
-		if item.Fields[n].ID == fieldName {
-			return item.Fields[n].Value
-		}
+func (p Provider1Password) buildVaultCommandArguments(baseCmd []string, includeTag bool) []string {
+	cmdArgs := baseCmd
+	if len(p.base) > 0 {
+		cmdArgs = append(cmdArgs, "--vault", p.base)
 	}
-	return ""
+	if includeTag && len(p.tag) > 0 {
+		cmdArgs = append(cmdArgs, "--tags", p.tag)
+	}
+	cmdArgs = append(cmdArgs, "--format", "json")
+
+	return cmdArgs
 }
 
 // DetermineBinary determines the binary to use for the 1Password CLI.
@@ -149,7 +150,6 @@ func getValueByField(item Item, fieldName string) string {
 // If the binaryPath is empty, it will try to find the binary using the which command.
 func DetermineBinary(binaryPath string) (string, error) {
 	var err error
-
 	// Configured binary
 	fullBinaryPath := strings.TrimSpace(binaryPath)
 	if len(fullBinaryPath) > 0 {
@@ -175,11 +175,25 @@ func DetermineBinary(binaryPath string) (string, error) {
 		return "", err
 	}
 
-	foundBinary := string(whichOutput)
+	foundBinary := strings.TrimSpace(string(whichOutput))
 	if len(foundBinary) == 0 {
 		err = fmt.Errorf("could not find executable \"%s\" for 1Password CLI", BINARY_NAME_1PASSWORD)
 		return "", err
 	}
 
 	return foundBinary, nil
+}
+
+func getValueByField(item Item, fieldName string) string {
+	for n := 0; n < len(item.Fields); n++ {
+		if item.Fields[n].Type == "OTP" && fieldName == "totp" {
+			return item.Fields[n].Totp
+		}
+
+		if item.Fields[n].ID == fieldName {
+			return item.Fields[n].Value
+		}
+	}
+
+	return ""
 }
