@@ -327,6 +327,8 @@ func runRecipes(p *tea.Program, provider string, vaultItems []vault.Item) {
 	}
 	r := prepareRecipes(provider, vaultItems)
 
+	// TODO when len(r) is zero (no recipe) or vault-item found, an error should be posted
+
 	rc := len(r)
 	t = "Running recipes for " + fmt.Sprintf("%d", rc) + " suppliers..."
 	if rc == 1 {
