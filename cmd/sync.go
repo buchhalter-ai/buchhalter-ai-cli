@@ -121,14 +121,14 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 
 	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, vaultConfigBinary, vaultConfigBase, vaultConfigTag)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
 		os.Exit(1)
 	}
 
 	// Load vault items/try to connect to 1password cli
 	vaultItems, err := vaultProvider.LoadVaultItems()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
 		os.Exit(1)
 	}
 
@@ -397,7 +397,7 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 		recipeCredentials, err := vaultProvider.GetCredentialsByItemId(r[i].vaultItemId)
 		if err != nil {
 			// TODO Implement better error handling
-			fmt.Println(err)
+			fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
 			continue
 		}
 

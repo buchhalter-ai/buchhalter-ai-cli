@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -60,4 +61,51 @@ type Credentials struct {
 	Username string
 	Password string
 	Totp     string
+}
+
+const (
+	ProviderNotInstalledErrorCode    int = 9001
+	ProviderConnectionErrorCode      int = 9002
+	ProviderResponseParsingErrorCode int = 9003
+	CommandExecutionErrorCode        int = 9004
+)
+
+type ProviderNotInstalledError struct {
+	Code int
+	Cmd  string
+	Err  error
+}
+
+func (e ProviderNotInstalledError) Error() string {
+	return fmt.Sprintf("Error %d provider could not be found \"%s\": %s", e.Code, e.Cmd, e.Err.Error())
+}
+
+type ProviderConnectionError struct {
+	Code int
+	Cmd  string
+	Err  error
+}
+
+func (e ProviderConnectionError) Error() string {
+	return fmt.Sprintf("Error %d could not connect to password vault \"%s\": %s", e.Code, e.Cmd, e.Err.Error())
+}
+
+type ProviderResponseParsingError struct {
+	Code int
+	Cmd  string
+	Err  error
+}
+
+func (e ProviderResponseParsingError) Error() string {
+	return fmt.Sprintf("Error %d reading password vault responce\"%s\": %s", e.Code, e.Cmd, e.Err.Error())
+}
+
+type CommandExecutionError struct {
+	Code int
+	Cmd  string
+	Err  error
+}
+
+func (e CommandExecutionError) Error() string {
+	return fmt.Sprintf("Error %d executing command \"%s\": %s", e.Code, e.Cmd, e.Err.Error())
 }
