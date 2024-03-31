@@ -125,7 +125,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		os.Exit(1)
 	}
 
-	// Load vault items/try to connect to 1password cli
+	// Load vault items/try to connect to vault
 	vaultItems, err := vaultProvider.LoadVaultItems()
 	if err != nil {
 		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
