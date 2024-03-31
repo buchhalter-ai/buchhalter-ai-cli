@@ -5,12 +5,6 @@ import (
 	"time"
 )
 
-const (
-	PROVIDER_1PASSWORD = "1password"
-
-	BINARY_NAME_1PASSWORD = "op"
-)
-
 type Items []Item
 
 type Item struct {
