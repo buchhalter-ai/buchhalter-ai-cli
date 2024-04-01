@@ -526,8 +526,20 @@ func quit(m model) model {
 	}
 
 	// TODO Wait group for browser and client
-	go browser.Quit()
-	go client.Quit()
+	go func() {
+		err := browser.Quit()
+		if err != nil {
+			// TODO implement better error handling
+			fmt.Println(err)
+		}
+	}()
+	go func() {
+		err := client.Quit()
+		if err != nil {
+			// TODO implement better error handling
+			fmt.Println(err)
+		}
+	}()
 
 	return m
 }
