@@ -65,12 +65,12 @@ func updateExists(repositoryUrl, currentChecksum string) (bool, error) {
 				return false, nil
 			}
 			return true, nil
-		} else {
-			return false, fmt.Errorf("update failed with checksum mismatch")
 		}
-	} else {
-		return false, fmt.Errorf("http request failed with status code: %d", resp.StatusCode)
+
+		return false, fmt.Errorf("update failed with checksum mismatch")
 	}
+
+	return false, fmt.Errorf("http request failed with status code: %d", resp.StatusCode)
 }
 
 func UpdateIfAvailable() error {
