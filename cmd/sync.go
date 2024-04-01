@@ -183,7 +183,10 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 }
 
 func prepareRecipes(provider string, vaultProvider *vault.Provider1Password) []recipeToExecute {
-	loadRecipeResult, err := parser.LoadRecipes()
+	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
+	buchhalterDirectory := viper.GetString("buchhalter_directory")
+	devMode := viper.GetBool("dev")
+	loadRecipeResult, err := parser.LoadRecipes(buchhalterConfigDirectory, buchhalterDirectory, devMode)
 	if err != nil {
 		// TODO Implement better error handling
 		fmt.Println(loadRecipeResult)

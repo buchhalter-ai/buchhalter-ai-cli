@@ -10,7 +10,6 @@ import (
 
 	"buchhalter/lib/vault"
 
-	"github.com/spf13/viper"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -64,9 +63,9 @@ type Step struct {
 
 type Urls []string
 
-func ValidateRecipes() (bool, error) {
+func ValidateRecipes(buchhalterConfigDirectory string) (bool, error) {
 	schemaLoader := gojsonschema.NewReferenceLoader("file://schema/oicdb.schema.json")
-	documentLoader := gojsonschema.NewReferenceLoader("file://" + filepath.Join(viper.GetString("buchhalter_config_directory"), "oicdb.json"))
+	documentLoader := gojsonschema.NewReferenceLoader("file://" + filepath.Join(buchhalterConfigDirectory, "oicdb.json"))
 
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
 	if err != nil {
@@ -84,13 +83,13 @@ func ValidateRecipes() (bool, error) {
 	return false, nil
 }
 
-func LoadRecipes() (bool, error) {
-	validationResult, err := ValidateRecipes()
+func LoadRecipes(buchhalterConfigDirectory, buchhalterDirectory string, devMode bool) (bool, error) {
+	validationResult, err := ValidateRecipes(buchhalterConfigDirectory)
 	if err != nil {
 		return validationResult, err
 	}
 
-	dbFile, err := os.Open(filepath.Join(viper.GetString("buchhalter_config_directory"), "oicdb.json"))
+	dbFile, err := os.Open(filepath.Join(buchhalterConfigDirectory, "oicdb.json"))
 	if err != nil {
 		return false, err
 	}
@@ -104,9 +103,9 @@ func LoadRecipes() (bool, error) {
 	OicdbVersion = db.Version
 
 	/** Create local recipes directory if not exists */
-	if viper.GetBool("dev") {
+	if devMode {
 		OicdbVersion = OicdbVersion + "-dev"
-		err = loadLocalRecipes()
+		err = loadLocalRecipes(buchhalterDirectory)
 		if err != nil {
 			return false, err
 		}
@@ -122,10 +121,9 @@ func LoadRecipes() (bool, error) {
 	return true, nil
 }
 
-func loadLocalRecipes() error {
+func loadLocalRecipes(buchhalterDirectory string) error {
 	sf := "_local/recipes"
-	bd := viper.GetString("buchhalter_directory")
-	recipesDir := filepath.Join(bd, sf)
+	recipesDir := filepath.Join(buchhalterDirectory, sf)
 	if _, err := os.Stat(recipesDir); os.IsNotExist(err) {
 		err := os.Mkdir(recipesDir, 0755)
 		if err != nil {
@@ -143,7 +141,7 @@ func loadLocalRecipes() error {
 		filename := file.Name()
 		extension := filepath.Ext(filename)
 		filenameWithoutExtension := filename[0 : len(filename)-len(extension)]
-		recipeFile, err := os.Open(filepath.Join(bd, sf, filename))
+		recipeFile, err := os.Open(filepath.Join(buchhalterDirectory, sf, filename))
 		if err != nil {
 			return err
 		}
