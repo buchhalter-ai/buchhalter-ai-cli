@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -42,7 +41,10 @@ type secretFileEntryTokens struct {
 }
 
 func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens) error {
-	sfe := readSecretsFile()
+	sfe, err := readSecretsFile()
+	if err != nil {
+		return err
+	}
 	ca := int(time.Now().Unix())
 	t := secretFileEntryTokens{
 		AccessTokenEncrypted:  tokens.AccessToken,
@@ -76,7 +78,11 @@ func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens) error {
 
 func GetOauthAccessTokenFromCache(id string) (Oauth2Tokens, error) {
 	var tokens Oauth2Tokens
-	sfe := readSecretsFile()
+	sfe, err := readSecretsFile()
+	if err != nil {
+		return tokens, err
+	}
+
 	for _, e := range sfe.Secrets {
 		if e.Id == id {
 			tokens = Oauth2Tokens{
@@ -93,29 +99,35 @@ func GetOauthAccessTokenFromCache(id string) (Oauth2Tokens, error) {
 	return tokens, fmt.Errorf("no tokens found for id %s", id)
 }
 
-func readSecretsFile() secretFile {
+func readSecretsFile() (secretFile, error) {
 	var sfe secretFile
 	bd := viper.GetString("buchhalter_config_directory")
 	sef := filepath.Join(bd, secretsFilename)
 	if _, err := os.Stat(sef); os.IsNotExist(err) {
 		err = os.WriteFile(filepath.Join(bd, secretsFilename), nil, 0600)
 		if err != nil {
-			fmt.Println(err)
+			return sfe, err
 		}
-		return sfe
+		return sfe, nil
+
 	} else {
 		sf, err := os.Open(sef)
 		if err != nil {
-			fmt.Println(err)
+			return sfe, err
 		}
 		defer sf.Close()
 
-		byteValue, _ := io.ReadAll(sf)
+		byteValue, err := io.ReadAll(sf)
+		if err != nil {
+			return sfe, err
+		}
+
 		err = json.Unmarshal(byteValue, &sfe)
 		if err != nil {
-			log.Fatal(err)
+			return sfe, err
 		}
-		return sfe
+
+		return sfe, nil
 	}
 }
 
