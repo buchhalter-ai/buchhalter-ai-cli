@@ -339,7 +339,6 @@ func stepTransform(step parser.Step) utils.StepResult {
 }
 
 func stepMove(step parser.Step) utils.StepResult {
-	var a []string
 	newFilesCount = 0
 	err := filepath.WalkDir(downloadsDirectory, func(s string, d fs.DirEntry, e error) error {
 		if e != nil {
@@ -351,7 +350,7 @@ func stepMove(step parser.Step) utils.StepResult {
 		}
 		if match {
 			srcFile := filepath.Join(downloadsDirectory, d.Name())
-			//check if file already exists
+			// Check if file already exists
 			if !archive.FileExists(srcFile) {
 				newFilesCount++
 				_, err := utils.CopyFile(srcFile, filepath.Join(documentsDirectory, d.Name()))
@@ -364,13 +363,6 @@ func stepMove(step parser.Step) utils.StepResult {
 	})
 	if err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
-	}
-
-	for _, s := range a {
-		err = utils.UnzipFile(s, downloadsDirectory)
-		if err != nil {
-			return utils.StepResult{Status: "error", Message: "Error while unzipping file: " + err.Error()}
-		}
 	}
 
 	return utils.StepResult{Status: "success"}
