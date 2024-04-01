@@ -26,6 +26,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -160,7 +161,8 @@ func stepOauth2Setup(step parser.Step) utils.StepResult {
 func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials) utils.StepResult {
 	// Try to get secrets from cache
 	pii := recipe.Provider + "|" + credentials.Id
-	tokens, err := secrets.GetOauthAccessTokenFromCache(pii)
+	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
+	tokens, err := secrets.GetOauthAccessTokenFromCache(pii, buchhalterConfigDirectory)
 
 	if err == nil {
 		if validOauth2AuthToken(tokens) {
@@ -380,7 +382,8 @@ func getOauth2Tokens(ctx context.Context, payload []byte, step parser.Step, pii 
 		if err != nil {
 			return tj, fmt.Errorf("error unmarshalling JSON: %w", err)
 		}
-		err = secrets.SaveOauth2TokensToFile(pii, tj)
+		buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
+		err = secrets.SaveOauth2TokensToFile(pii, tj, buchhalterConfigDirectory)
 		if err != nil {
 			return tj, fmt.Errorf("error storing Oauth2 token ti file: %w", err)
 		}

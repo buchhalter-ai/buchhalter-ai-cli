@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/spf13/viper"
 )
 
 var secretsFilename string = ".secrets.json"
@@ -40,8 +38,8 @@ type secretFileEntryTokens struct {
 	CreatedAt             int    `json:"createdAt"`
 }
 
-func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens) error {
-	sfe, err := readSecretsFile()
+func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens, buchhalterConfigDirectory string) error {
+	sfe, err := readSecretsFile(buchhalterConfigDirectory)
 	if err != nil {
 		return err
 	}
@@ -74,12 +72,13 @@ func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens) error {
 		sfe.Secrets = append(sfe.Secrets, sfn)
 	}
 
-	return writeSecretsFile(sfe)
+	return writeSecretsFile(sfe, buchhalterConfigDirectory)
 }
 
-func GetOauthAccessTokenFromCache(id string) (Oauth2Tokens, error) {
+func GetOauthAccessTokenFromCache(id, buchhalterConfigDirectory string) (Oauth2Tokens, error) {
 	var tokens Oauth2Tokens
-	sfe, err := readSecretsFile()
+
+	sfe, err := readSecretsFile(buchhalterConfigDirectory)
 	if err != nil {
 		return tokens, err
 	}
@@ -101,12 +100,12 @@ func GetOauthAccessTokenFromCache(id string) (Oauth2Tokens, error) {
 	return tokens, fmt.Errorf("no tokens found for id %s", id)
 }
 
-func readSecretsFile() (secretFile, error) {
+func readSecretsFile(buchhalterConfigDirectory string) (secretFile, error) {
 	var sfe secretFile
-	bd := viper.GetString("buchhalter_config_directory")
-	sef := filepath.Join(bd, secretsFilename)
+
+	sef := filepath.Join(buchhalterConfigDirectory, secretsFilename)
 	if _, err := os.Stat(sef); os.IsNotExist(err) {
-		err = os.WriteFile(filepath.Join(bd, secretsFilename), nil, 0600)
+		err = os.WriteFile(filepath.Join(buchhalterConfigDirectory, secretsFilename), nil, 0600)
 		if err != nil {
 			return sfe, err
 		}
@@ -133,14 +132,13 @@ func readSecretsFile() (secretFile, error) {
 	}
 }
 
-func writeSecretsFile(sfe secretFile) error {
+func writeSecretsFile(sfe secretFile, buchhalterConfigDirectory string) error {
 	sfj, err := json.MarshalIndent(sfe, "", "    ")
 	if err != nil {
 		return err
 	}
 
-	bd := viper.GetString("buchhalter_config_directory")
-	err = os.WriteFile(filepath.Join(bd, secretsFilename), sfj, 0600)
+	err = os.WriteFile(filepath.Join(buchhalterConfigDirectory, secretsFilename), sfj, 0600)
 	if err != nil {
 		return err
 	}
