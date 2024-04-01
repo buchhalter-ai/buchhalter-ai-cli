@@ -186,7 +186,7 @@ func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step pars
 "refresh_token": "` + tokens.RefreshToken + `",
 "scope": "` + oauth2Scope + `"
 }`)
-			nt, err := getOauth2Tokens(ctx, payload, step, pii, buchhalterConfigDirectory)
+			nt, err := getOauth2Tokens(ctx, payload, pii, buchhalterConfigDirectory)
 			if err == nil {
 				oauth2AuthToken = nt.AccessToken
 				return utils.StepResult{Status: "error", Message: "Error getting oauth2 access token with refresh token", Break: true}
@@ -252,7 +252,7 @@ func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step par
 }`)
 
 	pii := recipe.Provider + "|" + credentials.Id
-	tokens, err := getOauth2Tokens(ctx, payload, step, pii, buchhalterConfigDirectory)
+	tokens, err := getOauth2Tokens(ctx, payload, pii, buchhalterConfigDirectory)
 	if err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
@@ -384,7 +384,7 @@ func doRequest(ctx context.Context, url string, method string, headers map[strin
 	return false, nil
 }
 
-func getOauth2Tokens(ctx context.Context, payload []byte, step parser.Step, pii, buchhalterConfigDirectory string) (secrets.Oauth2Tokens, error) {
+func getOauth2Tokens(ctx context.Context, payload []byte, pii, buchhalterConfigDirectory string) (secrets.Oauth2Tokens, error) {
 	var tj secrets.Oauth2Tokens
 	req, err := http.NewRequestWithContext(ctx, "POST", oauth2TokenUrl, bytes.NewBuffer(payload))
 	if err != nil {
