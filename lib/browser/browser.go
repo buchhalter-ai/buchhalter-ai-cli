@@ -45,6 +45,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 		cu.WithContext(browserCtx),
 	))
 	if err != nil {
+		// TODO Implement error handling
 		panic(err)
 	}
 	defer cancel()
@@ -67,6 +68,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 			chromedp.Text(`#version`, &ChromeVersion, chromedp.NodeVisible),
 		})
 		if err != nil {
+			// TODO Implement error handling
 			log.Fatal(err)
 		}
 		ChromeVersion = strings.TrimSpace(ChromeVersion)
@@ -78,12 +80,14 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 			WithDownloadPath(downloadsDirectory).
 			WithEventsEnabled(true),
 		chromedp.ActionFunc(func(ctx context.Context) error {
+			// TODO Implement error handling
 			_ = waitForLoadEvent(ctx)
 			return nil
 		}),
 	})
 
 	if err != nil {
+		// TODO Implement error handling
 		log.Fatal(err)
 	}
 
@@ -125,6 +129,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 				sr <- stepRunScriptDownloadUrls(ctx, step)
 			}
 		}()
+
 		select {
 		case lsr := <-sr:
 			newDocumentsText := strconv.Itoa(newFilesCount) + " new documents"
@@ -160,6 +165,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 				}
 				return result
 			}
+
 		case <-time.After(recipeTimeout):
 			result = utils.RecipeResult{
 				Status:              "error",
@@ -189,10 +195,12 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 	return result
 }
 
-func Quit() {
+func Quit() error {
 	if browserCtx != nil {
-		_ = chromedp.Cancel(browserCtx)
+		return chromedp.Cancel(browserCtx)
 	}
+
+	return nil
 }
 
 func stepOpen(ctx context.Context, step parser.Step) utils.StepResult {
@@ -458,6 +466,7 @@ func waitForLoadEvent(ctx context.Context) error {
 			}
 		}
 	})
+
 	select {
 	case <-ch:
 		return nil
