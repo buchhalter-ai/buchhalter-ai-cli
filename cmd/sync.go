@@ -95,7 +95,11 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 	if !viper.GetBool("dev") {
 		t = "Checking for repository updates"
 		p.Send(resultStatusUpdate{title: t})
-		err := repository.UpdateIfAvailable()
+
+		buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
+		repositoryUrl := viper.GetString("buchhalter_repository_url")
+		currentChecksum := viper.GetString("buchhalter_repository_checksum")
+		err := repository.UpdateIfAvailable(buchhalterConfigDirectory, repositoryUrl, currentChecksum)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)

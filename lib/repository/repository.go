@@ -73,14 +73,13 @@ func updateExists(repositoryUrl, currentChecksum string) (bool, error) {
 	return false, fmt.Errorf("http request failed with status code: %d", resp.StatusCode)
 }
 
-func UpdateIfAvailable() error {
-	repositoryUrl := viper.GetString("buchhalter_repository_url")
-	currentChecksum := viper.GetString("buchhalter_repository_checksum")
+func UpdateIfAvailable(buchhalterConfigDirectory, repositoryUrl, currentChecksum string) error {
 	updateExists, err := updateExists(repositoryUrl, currentChecksum)
 	if err != nil {
 		fmt.Printf("You're offline. Please connect to the internet for using buchhalter-cli")
 		os.Exit(1)
 	}
+
 	if updateExists {
 		client := &http.Client{
 			Timeout: 10 * time.Second,
@@ -92,6 +91,8 @@ func UpdateIfAvailable() error {
 				return err
 			}
 		}
+
+		// TODO Add CLI version to User-Agent, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/User-Agent
 		req.Header.Set("User-Agent", "buchhalter-cli")
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
@@ -102,19 +103,21 @@ func UpdateIfAvailable() error {
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
-			out, err := os.Create(filepath.Join(viper.GetString("buchhalter_config_directory"), "oicdb.json"))
+			out, err := os.Create(filepath.Join(buchhalterConfigDirectory, "oicdb.json"))
 			if err != nil {
 				return fmt.Errorf("couldn't create oicdb.json file: %w", err)
 			}
 			defer out.Close()
+
 			_, err = io.Copy(out, resp.Body)
 			if err != nil {
 				return fmt.Errorf("error copying response body to file: %w", err)
 			}
-		} else {
-			return fmt.Errorf("http request failed with status code: %d", resp.StatusCode)
+
 		}
+		return fmt.Errorf("http request failed with status code: %d", resp.StatusCode)
 	}
+
 	return nil
 }
 
