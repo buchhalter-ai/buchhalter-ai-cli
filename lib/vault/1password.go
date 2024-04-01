@@ -151,28 +151,23 @@ func (p Provider1Password) buildVaultCommandArguments(baseCmd []string, includeT
 func (p *Provider1Password) GetHumanReadableErrorMessage(err error) string {
 	message := ""
 
+	// The concrete (developer oriented) error message is available in err
 	switch err.(type) {
 	case ProviderNotInstalledError:
 		message = `Could not find out 1Password cli version. Install 1Password cli, first.
-Please read "Get started with 1Password CLI" at https://developer.1password.com/docs/cli/get-started/
-%+v`
-		message = fmt.Sprintf(message, err)
+Please read "Get started with 1Password CLI" at https://developer.1password.com/docs/cli/get-started/`
 
 	case ProviderConnectionError:
 		message = `Could not connect to 1Password vault. Open 1Password vault with "eval $(op signin)", first.
-Please read "Sign in to 1Password CLI" at https://developer.1password.com/docs/cli/reference/commands/signin/
-%+v`
-		message = fmt.Sprintf(message, err)
+Please read "Sign in to 1Password CLI" at https://developer.1password.com/docs/cli/reference/commands/signin/`
 
 	case ProviderResponseParsingError:
-		message = `Could not read response data from 1Password vault.
-%+v`
-		message = fmt.Sprintf(message, err)
+		message = `Could not read response data from 1Password vault.`
 
 	case CommandExecutionError:
-		message = `An error occurred while executing a command:
-%+v`
-		message = fmt.Sprintf(message, err)
+		ceErr, _ := err.(*CommandExecutionError)
+		message = `An error occurred while executing a command: %s`
+		message = fmt.Sprintf(message, ceErr.Cmd)
 	}
 
 	return message
