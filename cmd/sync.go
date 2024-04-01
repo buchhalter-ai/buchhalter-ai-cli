@@ -164,7 +164,8 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 	}
 
 	if viper.GetBool("buchhalter_always_send_metrics") {
-		err = repository.SendMetrics(RunData, CliVersion, ChromeVersion)
+		metricsUrl := viper.GetString("buchhalter_metrics_url")
+		err = repository.SendMetrics(metricsUrl, RunData, CliVersion, ChromeVersion)
 		if err != nil {
 			// TODO Implement better error handling
 			fmt.Println(err)
@@ -213,7 +214,8 @@ func prepareRecipes(provider string, vaultProvider *vault.Provider1Password) []r
 }
 
 func sendMetrics(a bool) {
-	err := repository.SendMetrics(RunData, CliVersion, ChromeVersion)
+	metricsUrl := viper.GetString("buchhalter_metrics_url")
+	err := repository.SendMetrics(metricsUrl, RunData, CliVersion, ChromeVersion)
 	if err != nil {
 		// TODO Implement better error handling
 		fmt.Println(err)

@@ -1,8 +1,6 @@
 package repository
 
 import (
-	"buchhalter/lib/parser"
-	"buchhalter/lib/vault"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -14,7 +12,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/spf13/viper"
+	"buchhalter/lib/parser"
+	"buchhalter/lib/vault"
 )
 
 type Metric struct {
@@ -120,8 +119,7 @@ func UpdateIfAvailable(buchhalterConfigDirectory, repositoryUrl, currentChecksum
 	return nil
 }
 
-func SendMetrics(rd RunData, v string, c string) error {
-	metricsUrl := viper.GetString("buchhalter_metrics_url")
+func SendMetrics(metricsUrl string, rd RunData, v string, c string) error {
 	rdx, err := json.Marshal(rd)
 	if err != nil {
 		return fmt.Errorf("error marshalling run data: %w", err)
