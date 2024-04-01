@@ -6,6 +6,7 @@ import (
 	"buchhalter/lib/utils"
 	"buchhalter/lib/vault"
 	"context"
+	"fmt"
 	"io/fs"
 	"log"
 	"path/filepath"
@@ -296,7 +297,12 @@ func stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 func stepTransform(ctx context.Context, step parser.Step) utils.StepResult {
 	switch step.Value {
 	case "unzip":
-		for _, s := range utils.FindFiles(downloadsDirectory, ".zip") {
+		zipFiles, err := utils.FindFiles(downloadsDirectory, ".zip")
+		if err != nil {
+			// TODO improve error handling
+			fmt.Println(err)
+		}
+		for _, s := range zipFiles {
 			err := utils.UnzipFile(s, downloadsDirectory)
 			if err != nil {
 				return utils.StepResult{Status: "error", Message: err.Error()}

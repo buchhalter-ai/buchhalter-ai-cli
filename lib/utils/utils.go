@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"math/big"
 	"os"
 	"path"
@@ -62,20 +61,22 @@ func InitProviderDirectories(provider string) (string, string) {
 	return downloadsDirectory, documentsDirectory
 }
 
-func CreateDirectoryIfNotExists(path string) {
+func CreateDirectoryIfNotExists(path string) error {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		err := os.MkdirAll(path, os.ModePerm)
 		if err != nil {
-			log.Println(err)
+			return err
 		}
 	}
+
+	return nil
 }
 
-func TruncateDirectory(path string) {
-	os.RemoveAll(path)
+func TruncateDirectory(path string) error {
+	return os.RemoveAll(path)
 }
 
-func FindFiles(root, ext string) []string {
+func FindFiles(root, ext string) ([]string, error) {
 	var a []string
 	err := filepath.WalkDir(root, func(s string, d fs.DirEntry, e error) error {
 		if e != nil {
@@ -88,10 +89,10 @@ func FindFiles(root, ext string) []string {
 	})
 
 	if err != nil {
-		log.Fatal(err)
+		return a, err
 	}
 
-	return a
+	return a, nil
 }
 
 func CopyFile(src, dst string) (int64, error) {
@@ -115,6 +116,7 @@ func CopyFile(src, dst string) (int64, error) {
 		return 0, err
 	}
 	defer destination.Close()
+
 	nBytes, err := io.Copy(destination, source)
 	return nBytes, err
 }
@@ -125,6 +127,7 @@ func UnzipFile(source, dest string) error {
 		return err
 	}
 	defer read.Close()
+
 	for _, file := range read.File {
 		if file.Mode().IsDir() {
 			continue
@@ -135,17 +138,23 @@ func UnzipFile(source, dest string) error {
 		}
 		// Sanitize the filename to prevent path traversal
 		name := filepath.Join(dest, filepath.Base(file.Name))
-		CreateDirectoryIfNotExists(path.Dir(name))
+		err = CreateDirectoryIfNotExists(path.Dir(name))
+		if err != nil {
+			return err
+		}
+
 		create, err := os.Create(name)
 		if err != nil {
 			return err
 		}
 		defer create.Close()
+
 		_, err = create.ReadFrom(open)
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
