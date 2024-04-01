@@ -100,6 +100,8 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 			switch action := step.Action; action {
 			case "open":
 				sr <- stepOpen(ctx, step)
+			case "removeElement":
+				sr <- stepRemoveElement(ctx, step)
 			case "click":
 				sr <- stepClick(ctx, step)
 			case "type":
@@ -192,6 +194,16 @@ func stepOpen(ctx context.Context, step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
+func stepRemoveElement(ctx context.Context, step parser.Step) utils.StepResult {
+	nodeName := "node" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := chromedp.Run(ctx,
+		chromedp.Evaluate("let "+nodeName+" = document.querySelector('"+step.Selector+"'); "+nodeName+".parentNode.removeChild("+nodeName+")", nil),
+	); err != nil {
+		return utils.StepResult{Status: "error", Message: err.Error()}
+	}
+	return utils.StepResult{Status: "success"}
+}
+
 func stepClick(ctx context.Context, step parser.Step) utils.StepResult {
 	if err := chromedp.Run(ctx,
 		chromedp.Click(step.Selector, chromedp.NodeReady),
@@ -233,10 +245,9 @@ func stepWaitFor(ctx context.Context, step parser.Step) utils.StepResult {
 
 func stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	var nodes []*cdp.Node
-	selector := step.Selector
 	err := chromedp.Run(ctx, chromedp.Tasks{
-		chromedp.WaitReady(selector),
-		chromedp.Nodes(selector, &nodes),
+		chromedp.WaitReady(step.Selector),
+		chromedp.Nodes(step.Selector, &nodes),
 	})
 	if err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
