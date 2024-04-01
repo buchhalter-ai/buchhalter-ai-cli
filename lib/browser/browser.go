@@ -120,9 +120,9 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 			case "downloadAll":
 				sr <- stepDownloadAll(ctx, step)
 			case "transform":
-				sr <- stepTransform(ctx, step)
+				sr <- stepTransform(step)
 			case "move":
-				sr <- stepMove(ctx, step)
+				sr <- stepMove(step)
 			case "runScript":
 				sr <- stepRunScript(ctx, step)
 			case "runScriptDownloadUrls":
@@ -319,7 +319,7 @@ func stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
-func stepTransform(ctx context.Context, step parser.Step) utils.StepResult {
+func stepTransform(step parser.Step) utils.StepResult {
 	switch step.Value {
 	case "unzip":
 		zipFiles, err := utils.FindFiles(downloadsDirectory, ".zip")
@@ -334,10 +334,11 @@ func stepTransform(ctx context.Context, step parser.Step) utils.StepResult {
 			}
 		}
 	}
+
 	return utils.StepResult{Status: "success"}
 }
 
-func stepMove(ctx context.Context, step parser.Step) utils.StepResult {
+func stepMove(step parser.Step) utils.StepResult {
 	var a []string
 	newFilesCount = 0
 	err := filepath.WalkDir(downloadsDirectory, func(s string, d fs.DirEntry, e error) error {
@@ -364,12 +365,14 @@ func stepMove(ctx context.Context, step parser.Step) utils.StepResult {
 	if err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
+
 	for _, s := range a {
 		err = utils.UnzipFile(s, downloadsDirectory)
 		if err != nil {
 			return utils.StepResult{Status: "error", Message: "Error while unzipping file: " + err.Error()}
 		}
 	}
+
 	return utils.StepResult{Status: "success"}
 }
 
@@ -404,6 +407,7 @@ func stepRunScriptDownloadUrls(ctx context.Context, step parser.Step) utils.Step
 			return utils.StepResult{Status: "error", Message: err.Error()}
 		}
 	}
+
 	return utils.StepResult{Status: "success"}
 }
 
