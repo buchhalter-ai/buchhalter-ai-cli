@@ -47,6 +47,8 @@ func updateExists(repositoryUrl, currentChecksum string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
+	// TODO Add CLI version to User-Agent, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/User-Agent
 	req.Header.Set("User-Agent", "buchhalter-cli")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
