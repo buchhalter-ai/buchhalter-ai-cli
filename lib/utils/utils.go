@@ -14,8 +14,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-
-	"github.com/spf13/viper"
 )
 
 const (
@@ -52,10 +50,9 @@ type RecipeResult struct {
 	NewFilesCount       int
 }
 
-func InitProviderDirectories(provider string) (string, string, error) {
-	wd := viper.GetString("buchhalter_directory")
-	downloadsDirectory = filepath.Join(wd, "_tmp", provider)
-	documentsDirectory = filepath.Join(wd, provider)
+func InitProviderDirectories(buchhalterDirectory, provider string) (string, string, error) {
+	downloadsDirectory = filepath.Join(buchhalterDirectory, "_tmp", provider)
+	documentsDirectory = filepath.Join(buchhalterDirectory, provider)
 	err := CreateDirectoryIfNotExists(downloadsDirectory)
 	if err != nil {
 		return "", "", err

@@ -25,6 +25,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -53,7 +54,8 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 	defer cancel()
 
 	// create download directories
-	downloadsDirectory, documentsDirectory, err = utils.InitProviderDirectories(recipe.Provider)
+	buchhalterDirectory := viper.GetString("buchhalter_directory")
+	downloadsDirectory, documentsDirectory, err = utils.InitProviderDirectories(buchhalterDirectory, recipe.Provider)
 	if err != nil {
 		// TODO Implement error handling
 		fmt.Println(err)

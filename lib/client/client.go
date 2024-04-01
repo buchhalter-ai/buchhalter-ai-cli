@@ -54,7 +54,8 @@ type HiddenInputFields struct {
 func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials) utils.RecipeResult {
 	//Init directories
 	var err error
-	downloadsDirectory, documentsDirectory, err = utils.InitProviderDirectories(recipe.Provider)
+	buchhalterDirectory := viper.GetString("buchhalter_directory")
+	downloadsDirectory, documentsDirectory, err = utils.InitProviderDirectories(buchhalterDirectory, recipe.Provider)
 	if err != nil {
 		// TODO Implement error handling
 		fmt.Println(err)
@@ -214,7 +215,7 @@ func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step par
 
 	var u string
 	listenForNetworkEvent(ctx)
-	err := chromedp.Run(ctx,
+	err = chromedp.Run(ctx,
 		run(5*time.Second, chromedp.Navigate(loginUrl)),
 		chromedp.SendKeys("#form-input-identity", credentials.Username, chromedp.ByID),
 		chromedp.Sleep(1*time.Second),
