@@ -45,6 +45,7 @@ func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens) error {
 	if err != nil {
 		return err
 	}
+
 	ca := int(time.Now().Unix())
 	t := secretFileEntryTokens{
 		AccessTokenEncrypted:  tokens.AccessToken,
@@ -96,6 +97,7 @@ func GetOauthAccessTokenFromCache(id string) (Oauth2Tokens, error) {
 			return tokens, nil
 		}
 	}
+
 	return tokens, fmt.Errorf("no tokens found for id %s", id)
 }
 
