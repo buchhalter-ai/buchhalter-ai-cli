@@ -41,7 +41,7 @@ type secretFileEntryTokens struct {
 	CreatedAt             int    `json:"createdAt"`
 }
 
-func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens) {
+func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens) error {
 	sfe := readSecretsFile()
 	ca := int(time.Now().Unix())
 	t := secretFileEntryTokens{
@@ -71,7 +71,7 @@ func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens) {
 		sfe.Secrets = append(sfe.Secrets, sfn)
 	}
 
-	writeSecretsFile(sfe)
+	return writeSecretsFile(sfe)
 }
 
 func GetOauthAccessTokenFromCache(id string) (Oauth2Tokens, error) {
@@ -119,15 +119,17 @@ func readSecretsFile() secretFile {
 	}
 }
 
-func writeSecretsFile(sfe secretFile) {
+func writeSecretsFile(sfe secretFile) error {
 	sfj, err := json.MarshalIndent(sfe, "", "    ")
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	bd := viper.GetString("buchhalter_config_directory")
 	err = os.WriteFile(filepath.Join(bd, secretsFilename), sfj, 0600)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
+
+	return nil
 }

@@ -380,7 +380,10 @@ func getOauth2Tokens(ctx context.Context, payload []byte, step parser.Step, pii 
 		if err != nil {
 			return tj, fmt.Errorf("error unmarshalling JSON: %w", err)
 		}
-		secrets.SaveOauth2TokensToFile(pii, tj)
+		err = secrets.SaveOauth2TokensToFile(pii, tj)
+		if err != nil {
+			return tj, fmt.Errorf("error storing Oauth2 token ti file: %w", err)
+		}
 		return tj, nil
 	} else if resp.StatusCode == 400 {
 		return tj, errors.New("unauthorized error while trying to get oauth2 access token with refresh token")
