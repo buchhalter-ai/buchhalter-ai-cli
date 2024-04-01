@@ -85,18 +85,18 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password) {
 	t := "Build archive index"
 	p.Send(resultStatusUpdate{title: t})
-	archiveDirectory := viper.GetString("buchhalter_directory")
-	err := archive.BuildArchiveIndex(archiveDirectory)
+	buchhalterDirectory := viper.GetString("buchhalter_directory")
+	err := archive.BuildArchiveIndex(buchhalterDirectory)
 	if err != nil {
 		// TODO Implement better error handling
 		fmt.Println(err)
 	}
 
+	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 	if !viper.GetBool("dev") {
 		t = "Checking for repository updates"
 		p.Send(resultStatusUpdate{title: t})
 
-		buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 		repositoryUrl := viper.GetString("buchhalter_repository_url")
 		currentChecksum := viper.GetString("buchhalter_repository_checksum")
 		err := repository.UpdateIfAvailable(buchhalterConfigDirectory, repositoryUrl, currentChecksum)
@@ -145,7 +145,7 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 				ChromeVersion = browser.ChromeVersion
 			}
 		case "client":
-			recipeResult = client.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials)
+			recipeResult = client.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory)
 			if ChromeVersion == "" {
 				ChromeVersion = client.ChromeVersion
 			}

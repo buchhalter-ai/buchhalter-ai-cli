@@ -1,11 +1,6 @@
 package client
 
 import (
-	"buchhalter/lib/archive"
-	"buchhalter/lib/parser"
-	"buchhalter/lib/secrets"
-	"buchhalter/lib/utils"
-	"buchhalter/lib/vault"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -21,12 +16,17 @@ import (
 	"strings"
 	"time"
 
+	"buchhalter/lib/archive"
+	"buchhalter/lib/parser"
+	"buchhalter/lib/secrets"
+	"buchhalter/lib/utils"
+	"buchhalter/lib/vault"
+
 	cu "github.com/Davincible/chromedp-undetected"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -51,10 +51,9 @@ type HiddenInputFields struct {
 	Fields map[string]string
 }
 
-func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials) utils.RecipeResult {
-	//Init directories
+func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials, buchhalterConfigDirectory, buchhalterDirectory string) utils.RecipeResult {
+	// Init directories
 	var err error
-	buchhalterDirectory := viper.GetString("buchhalter_directory")
 	downloadsDirectory, documentsDirectory, err = utils.InitProviderDirectories(buchhalterDirectory, recipe.Provider)
 	if err != nil {
 		// TODO Implement error handling
@@ -95,9 +94,9 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 			case "oauth2-setup":
 				sr <- stepOauth2Setup(step)
 			case "oauth2-check-tokens":
-				sr <- stepOauth2CheckTokens(ctx, recipe, step, credentials)
+				sr <- stepOauth2CheckTokens(ctx, recipe, step, credentials, buchhalterConfigDirectory)
 			case "oauth2-authenticate":
-				sr <- stepOauth2Authenticate(ctx, recipe, step, credentials)
+				sr <- stepOauth2Authenticate(ctx, recipe, step, credentials, buchhalterConfigDirectory)
 			case "oauth2-post-and-get-items":
 				sr <- stepOauth2PostAndGetItems(ctx, step)
 			}
@@ -164,10 +163,9 @@ func stepOauth2Setup(step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success", Message: "Successfully set up OAuth2 settings."}
 }
 
-func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials) utils.StepResult {
+func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials, buchhalterConfigDirectory string) utils.StepResult {
 	// Try to get secrets from cache
 	pii := recipe.Provider + "|" + credentials.Id
-	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 	tokens, err := secrets.GetOauthAccessTokenFromCache(pii, buchhalterConfigDirectory)
 
 	if err == nil {
@@ -181,7 +179,7 @@ func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step pars
 "refresh_token": "` + tokens.RefreshToken + `",
 "scope": "` + oauth2Scope + `"
 }`)
-			nt, err := getOauth2Tokens(ctx, payload, step, pii)
+			nt, err := getOauth2Tokens(ctx, payload, step, pii, buchhalterConfigDirectory)
 			if err == nil {
 				oauth2AuthToken = nt.AccessToken
 				return utils.StepResult{Status: "error", Message: "Error getting oauth2 access token with refresh token", Break: true}
@@ -191,7 +189,7 @@ func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step pars
 	return utils.StepResult{Status: "error", Message: "No access token found. New OAuth2 login needed."}
 }
 
-func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials) utils.StepResult {
+func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials, buchhalterConfigDirectory string) utils.StepResult {
 	if len(oauth2AuthToken) > 0 {
 		return utils.StepResult{Status: "success"}
 	}
@@ -245,7 +243,7 @@ func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step par
 }`)
 
 	pii := recipe.Provider + "|" + credentials.Id
-	tokens, err := getOauth2Tokens(ctx, payload, step, pii)
+	tokens, err := getOauth2Tokens(ctx, payload, step, pii, buchhalterConfigDirectory)
 	if err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
@@ -369,7 +367,7 @@ func doRequest(ctx context.Context, url string, method string, headers map[strin
 	return false
 }
 
-func getOauth2Tokens(ctx context.Context, payload []byte, step parser.Step, pii string) (secrets.Oauth2Tokens, error) {
+func getOauth2Tokens(ctx context.Context, payload []byte, step parser.Step, pii, buchhalterConfigDirectory string) (secrets.Oauth2Tokens, error) {
 	var tj secrets.Oauth2Tokens
 	req, err := http.NewRequestWithContext(ctx, "POST", oauth2TokenUrl, bytes.NewBuffer(payload))
 	if err != nil {
@@ -392,7 +390,7 @@ func getOauth2Tokens(ctx context.Context, payload []byte, step parser.Step, pii 
 		if err != nil {
 			return tj, fmt.Errorf("error unmarshalling JSON: %w", err)
 		}
-		buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
+
 		err = secrets.SaveOauth2TokensToFile(pii, tj, buchhalterConfigDirectory)
 		if err != nil {
 			return tj, fmt.Errorf("error storing Oauth2 token ti file: %w", err)
