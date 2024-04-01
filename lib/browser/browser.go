@@ -36,10 +36,7 @@ var (
 	newFilesCount      = 0
 )
 
-func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, itemId string) utils.RecipeResult {
-	//Load username, password, totp from vault
-	credentials := vault.GetCredentialsByItemId(itemId)
-
+func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials) utils.RecipeResult {
 	// New creates a new context for use with chromedp. With this context
 	// you can use chromedp as you normally would.
 	ctx, cancel, err := cu.New(cu.NewConfig(
@@ -213,7 +210,7 @@ func stepClick(ctx context.Context, step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
-func stepType(ctx context.Context, step parser.Step, credentials vault.Credentials) utils.StepResult {
+func stepType(ctx context.Context, step parser.Step, credentials *vault.Credentials) utils.StepResult {
 	step.Value = parseCredentialPlaceholders(step.Value, credentials)
 
 	if err := chromedp.Run(ctx,
@@ -379,7 +376,7 @@ func stepRunScriptDownloadUrls(ctx context.Context, step parser.Step) utils.Step
 	return utils.StepResult{Status: "success"}
 }
 
-func parseCredentialPlaceholders(value string, credentials vault.Credentials) string {
+func parseCredentialPlaceholders(value string, credentials *vault.Credentials) string {
 	value = strings.Replace(value, "{{ username }}", credentials.Username, -1)
 	value = strings.Replace(value, "{{ password }}", credentials.Password, -1)
 	value = strings.Replace(value, "{{ totp }}", credentials.Totp, -1)

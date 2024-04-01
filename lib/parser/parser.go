@@ -112,6 +112,7 @@ func LoadRecipes() bool {
 		}
 		RecipeByProvider[db.Recipes[i].Provider] = db.Recipes[i]
 	}
+
 	return true
 }
 
@@ -175,15 +176,15 @@ func getRecipeIndexByProvider(provider string) int {
 	return -1
 }
 
-func GetRecipeForItem(item vault.Item) *Recipe {
+func GetRecipeForItem(item vault.Item, urlsByItemId map[string][]string) *Recipe {
 	// Build regex pattern with all urls from the vault item
 	var pattern string
 	for domain := range RecipeProviderByDomain {
 		pattern = "^(https?://)?" + regexp.QuoteMeta(domain)
 
 		// Try to match all item urls with a recipe url (e.g. digitalocean login url) */
-		for i := 0; i < len(vault.UrlsByItemId[item.ID]); i++ {
-			matched, _ := regexp.MatchString(pattern, vault.UrlsByItemId[item.ID][i])
+		for i := 0; i < len(urlsByItemId[item.ID]); i++ {
+			matched, _ := regexp.MatchString(pattern, urlsByItemId[item.ID][i])
 			if matched {
 				// Return matching recipe
 				recipe := RecipeByProvider[RecipeProviderByDomain[domain]]
@@ -191,5 +192,6 @@ func GetRecipeForItem(item vault.Item) *Recipe {
 			}
 		}
 	}
+
 	return nil
 }

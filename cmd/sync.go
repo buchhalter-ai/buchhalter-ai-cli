@@ -1,26 +1,25 @@
 package cmd
 
 import (
-	"buchhalter/lib/archive"
-	"buchhalter/lib/browser"
-	"buchhalter/lib/client"
-	"buchhalter/lib/repository"
-	"buchhalter/lib/utils"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"buchhalter/lib/archive"
+	"buchhalter/lib/browser"
+	"buchhalter/lib/client"
+	"buchhalter/lib/parser"
+	"buchhalter/lib/repository"
+	"buchhalter/lib/utils"
+	"buchhalter/lib/vault"
+
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
-
-	"buchhalter/lib/parser"
-	"buchhalter/lib/vault"
-
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -35,8 +34,6 @@ var (
 	durationStyle = dotStyle.Copy()
 	spinnerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#D6D58E"))
 	appStyle      = lipgloss.NewStyle().Margin(1, 2, 0, 2)
-	vaultItems    []vault.Item
-	args          []string
 	choices       = []string{"Yes", "No", "Always yes (don't ask again)"}
 	ChromeVersion string
 	RunData       repository.RunData
@@ -66,6 +63,20 @@ type resultMsg struct {
 	newFilesCount int
 }
 
+func (r resultMsg) String() string {
+	s := len(r.step)
+	if r.duration == 0 {
+		if r.step != "" {
+			r.step = r.step + " " + strings.Repeat(".", maxWidth-1-s)
+			return r.step
+		}
+		return dotStyle.Render(strings.Repeat(".", maxWidth))
+	}
+	d := r.duration.Round(time.Second).String()
+	fill := strings.Repeat(".", maxWidth-1-s-(len(d)-8))
+	return fmt.Sprintf("%s %s%s", r.step, fill, durationStyle.Render(d))
+}
+
 type resultModeUpdate struct {
 	mode    string
 	title   string
@@ -86,18 +97,54 @@ type recipeToExecute struct {
 	vaultItemId string
 }
 
-func (r resultMsg) String() string {
-	s := len(r.step)
-	if r.duration == 0 {
-		if r.step != "" {
-			r.step = r.step + " " + strings.Repeat(".", maxWidth-1-s)
-			return r.step
-		}
-		return dotStyle.Render(strings.Repeat(".", maxWidth))
+var syncCmd = &cobra.Command{
+	Use:   "sync",
+	Short: "Synchronize all invoices from your suppliers",
+	Long:  "The sync command uses all buchhalter tagged credentials from your vault and synchronizes all invoices.",
+	Run:   RunSyncCommand,
+}
+
+func init() {
+	rootCmd.AddCommand(syncCmd)
+}
+
+func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
+	provider := ""
+	if len(cmdArgs) > 0 {
+		provider = cmdArgs[0]
 	}
-	d := r.duration.Round(time.Second).String()
-	fill := strings.Repeat(".", maxWidth-1-s-(len(d)-8))
-	return fmt.Sprintf("%s %s%s", r.step, fill, durationStyle.Render(d))
+	p := tea.NewProgram(initialModel())
+
+	vaultConfigBinary := viper.GetString("one_password_cli_command")
+	vaultConfigBase := viper.GetString("one_password_base")
+	vaultConfigTag := viper.GetString("one_password_tag")
+
+	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, vaultConfigBinary, vaultConfigBase, vaultConfigTag)
+	if err != nil {
+		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
+		os.Exit(1)
+	}
+
+	// Load vault items/try to connect to vault
+	vaultItems, err := vaultProvider.LoadVaultItems()
+	if err != nil {
+		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
+		os.Exit(1)
+	}
+
+	// Check if vault items are available
+	if len(vaultItems) == 0 {
+		fmt.Println("No vault items found. Please check your 1password vault.")
+		os.Exit(1)
+	}
+
+	// Run recipes
+	go runRecipes(p, provider, vaultProvider)
+
+	if _, err := p.Run(); err != nil {
+		fmt.Println("Error running program:", err)
+		os.Exit(1)
+	}
 }
 
 func (m model) Init() tea.Cmd {
@@ -124,10 +171,6 @@ func initialModel() model {
 		hasError:      false,
 	}
 	return m
-}
-
-func init() {
-	rootCmd.AddCommand(syncCmd)
 }
 
 func quit(m model) model {
@@ -311,7 +354,7 @@ func sendMetrics(a bool) {
 	}
 }
 
-func runRecipes(p *tea.Program, provider string, vaultItems []vault.Item) {
+func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password) {
 	t := "Build archive index"
 	p.Send(resultStatusUpdate{title: t})
 	archive.BuildArchiveIndex()
@@ -325,7 +368,10 @@ func runRecipes(p *tea.Program, provider string, vaultItems []vault.Item) {
 			os.Exit(1)
 		}
 	}
-	r := prepareRecipes(provider, vaultItems)
+
+	r := prepareRecipes(provider, vaultProvider)
+
+	// TODO when len(r) is zero (no recipe) or vault-item found, an error should be posted
 
 	rc := len(r)
 	t = "Running recipes for " + fmt.Sprintf("%d", rc) + " suppliers..."
@@ -346,14 +392,23 @@ func runRecipes(p *tea.Program, provider string, vaultItems []vault.Item) {
 		s := time.Now()
 		scs = len(r[i].recipe.Steps)
 		p.Send(resultStatusUpdate{title: "Downloading invoices from " + r[i].recipe.Provider + ":", hasError: false})
+
+		// Load username, password, totp from vault
+		recipeCredentials, err := vaultProvider.GetCredentialsByItemId(r[i].vaultItemId)
+		if err != nil {
+			// TODO Implement better error handling
+			fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
+			continue
+		}
+
 		switch r[i].recipe.Type {
 		case "browser":
-			recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, r[i].vaultItemId)
+			recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials)
 			if ChromeVersion == "" {
 				ChromeVersion = browser.ChromeVersion
 			}
 		case "client":
-			recipeResult = client.RunRecipe(p, tsc, scs, bcs, r[i].recipe, r[i].vaultItemId)
+			recipeResult = client.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials)
 			if ChromeVersion == "" {
 				ChromeVersion = client.ChromeVersion
 			}
@@ -385,60 +440,33 @@ func runRecipes(p *tea.Program, provider string, vaultItems []vault.Item) {
 	}
 }
 
-func prepareRecipes(provider string, vaultItems []vault.Item) []recipeToExecute {
+func prepareRecipes(provider string, vaultProvider *vault.Provider1Password) []recipeToExecute {
 	parser.LoadRecipes()
 
 	// Run single provider recipe
 	var r []recipeToExecute
 	sc := 0
+	vaultItems := vaultProvider.VaultItems
 	if provider != "" {
 		for i := range vaultItems {
 			// Check if a recipe exists for the item
-			recipe := parser.GetRecipeForItem(vaultItems[i])
+			recipe := parser.GetRecipeForItem(vaultItems[i], vaultProvider.UrlsByItemId)
 			if recipe != nil && provider == recipe.Provider {
 				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
 			}
 		}
+
 	} else {
 		// Run all recipes
 		for i := range vaultItems {
 			// Check if a recipe exists for the item
-			recipe := parser.GetRecipeForItem(vaultItems[i])
+			recipe := parser.GetRecipeForItem(vaultItems[i], vaultProvider.UrlsByItemId)
 			if recipe != nil {
 				sc = sc + len(recipe.Steps)
 				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
 			}
 		}
 	}
+
 	return r
-}
-
-var syncCmd = &cobra.Command{
-	Use:   "sync",
-	Short: "Synchronize all invoices from your suppliers",
-	Long:  "The sync command uses all buchhalter tagged credentials from your vault and synchronizes all invoices.",
-	Run: func(cmd *cobra.Command, cmdArgs []string) {
-		args = cmdArgs
-		provider := ""
-		if len(args) > 0 {
-			provider = args[0]
-		}
-		p := tea.NewProgram(initialModel())
-
-		// Load vault items/try to connect to 1password cli
-		var errorMessage string
-		vaultItems, errorMessage = vault.LoadVaultItems()
-		if errorMessage != "" {
-			fmt.Println(errorMessage)
-			os.Exit(0)
-		}
-
-		// Run recipes
-		go runRecipes(p, provider, vaultItems)
-
-		if _, err := p.Run(); err != nil {
-			fmt.Println("Error running program:", err)
-			os.Exit(1)
-		}
-	},
 }

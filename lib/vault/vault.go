@@ -1,127 +1,77 @@
 package vault
 
 import (
-	"encoding/json"
-	"log"
+	"errors"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/spf13/viper"
 )
 
 var VaultVersion string
-var UrlsByItemId = make(map[string][]string)
 
-type Items []Item
+func GetProvider(provider, binary, base, tag string) (*Provider1Password, error) {
+	switch provider {
+	case PROVIDER_1PASSWORD:
+		return New1PasswordProvider(binary, base, tag)
+	}
 
-type Item struct {
-	ID      string   `json:"id"`
-	Title   string   `json:"title"`
-	Tags    []string `json:"tags"`
-	Version int      `json:"version"`
-	Vault   struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	} `json:"vault"`
-	Category              string    `json:"category"`
-	LastEditedBy          string    `json:"last_edited_by"`
-	CreatedAt             time.Time `json:"created_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
-	AdditionalInformation string    `json:"additional_information"`
-	Urls                  []struct {
-		Label   string `json:"label"`
-		Primary bool   `json:"primary,omitempty"`
-		Href    string `json:"href"`
-	} `json:"urls"`
-	Sections []struct {
-		ID    string `json:"id"`
-		Label string `json:"label,omitempty"`
-	} `json:"sections"`
-	Fields []struct {
-		ID              string  `json:"id"`
-		Type            string  `json:"type"`
-		Purpose         string  `json:"purpose,omitempty"`
-		Label           string  `json:"label"`
-		Value           string  `json:"value"`
-		Reference       string  `json:"reference"`
-		Entropy         float64 `json:"entropy,omitempty"`
-		PasswordDetails struct {
-			Entropy   int    `json:"entropy"`
-			Generated bool   `json:"generated"`
-			Strength  string `json:"strength"`
-		} `json:"password_details,omitempty"`
-		Section struct {
-			ID string `json:"id"`
-		} `json:"section,omitempty"`
-		Totp string `json:"totp,omitempty"`
-	} `json:"fields"`
+	return nil, fmt.Errorf("provider %s not supported", provider)
 }
 
-type Credentials struct {
-	Id       string
-	Username string
-	Password string
-	Totp     string
-}
+// DetermineBinary determines the binary to use for the 1Password CLI.
+// If the binaryPath is set, it will check if the binary exists and is executable.
+// If the binaryPath is empty, it will try to find the binary using the which command.
+func DetermineBinary(binaryPath string) (string, error) {
+	var err error
 
-func LoadVaultItems() (Items, string) {
-	errorMessage := ""
-	opCliCommand := viper.GetString("one_password_cli_command")
-	opBase := viper.GetString("one_password_base")
-	opTag := viper.GetString("one_password_tag")
-
-	// Retrieve 1password cli version
-	// #nosec G204
-	version, err := exec.Command("bash", "-c", opCliCommand+" --version").Output()
-	if err != nil {
-		errorMessage = "Could not find out 1Password cli version. Install 1Password cli, first."
-		return nil, errorMessage
-	}
-	VaultVersion = strings.TrimSpace(string(version))
-
-	// #nosec G204
-	out, err := exec.Command("bash", "-c", opCliCommand+" item list --vault="+opBase+" --tags "+opTag+" --format json").Output()
-	if err != nil {
-		errorMessage = "Could not connect to 1Password vault. Open 1Password vault with `eval $(op signin)`, first."
-		return nil, errorMessage
-	}
-	var vaultItems Items
-	err = json.Unmarshal(out, &vaultItems)
-	if err != nil {
-		errorMessage = "Error while reading 1password logins with buchhalter-ai-tag. " + err.Error()
-		return nil, errorMessage
-	}
-
-	/** Read in all urls from a vault item and build up urls per item id map */
-	for n := 0; n < len(vaultItems); n++ {
-		var urls []string
-		for i := 0; i < len(vaultItems[n].Urls); i++ {
-			urls = append(urls, vaultItems[n].Urls[i].Href)
-		}
-		UrlsByItemId[vaultItems[n].ID] = urls
-	}
-	return vaultItems, errorMessage
-}
-
-func GetCredentialsByItemId(itemId string) Credentials {
-	opCliCommand := viper.GetString("one_password_cli_command")
-	opBase := viper.GetString("one_password_base")
-	// #nosec G204
-	out, err := exec.Command("bash", "-c", opCliCommand+" item get "+itemId+" --vault="+opBase+" --format json").Output()
-	var item Item
-	if err == nil {
-		err = json.Unmarshal(out, &item)
+	// Configured binary
+	fullBinaryPath := strings.TrimSpace(binaryPath)
+	if len(fullBinaryPath) > 0 {
+		fullBinaryPath, err = filepath.Abs(binaryPath)
 		if err != nil {
-			log.Fatal("Error while reading 1password logins with buchhalter-ai-tag. " + err.Error())
+			return "", ProviderNotInstalledError{
+				Code: ProviderNotInstalledErrorCode,
+				Cmd:  fullBinaryPath,
+				Err:  err,
+			}
+		}
+
+		if _, err := os.Stat(fullBinaryPath); errors.Is(err, os.ErrNotExist) {
+			return "", ProviderNotInstalledError{
+				Code: ProviderNotInstalledErrorCode,
+				Cmd:  fullBinaryPath,
+				Err:  err,
+			}
+		}
+
+		// TODO Check if fullBinaryPath is executable
+
+		return fullBinaryPath, nil
+	}
+
+	// Find binary
+	// TODO Check if this works on Windows or if we need to limit it to Linux and macOS
+	whichOutput, err := exec.Command("which", BINARY_NAME_1PASSWORD).Output()
+	if err != nil {
+		return "", CommandExecutionError{
+			Code: CommandExecutionErrorCode,
+			Cmd:  fmt.Sprintf("which %s", BINARY_NAME_1PASSWORD),
+			Err:  err,
 		}
 	}
-	var credentials Credentials
-	credentials.Id = itemId
-	credentials.Username = getValueByField(item, "username")
-	credentials.Password = getValueByField(item, "password")
-	credentials.Totp = getValueByField(item, "totp")
-	return credentials
+
+	foundBinary := strings.TrimSpace(string(whichOutput))
+	if len(foundBinary) == 0 {
+		return "", ProviderNotInstalledError{
+			Code: ProviderNotInstalledErrorCode,
+			Cmd:  BINARY_NAME_1PASSWORD,
+			Err:  fmt.Errorf("could not find executable \"%s\"", BINARY_NAME_1PASSWORD),
+		}
+	}
+
+	return foundBinary, nil
 }
 
 func getValueByField(item Item, fieldName string) string {
@@ -129,9 +79,11 @@ func getValueByField(item Item, fieldName string) string {
 		if item.Fields[n].Type == "OTP" && fieldName == "totp" {
 			return item.Fields[n].Totp
 		}
+
 		if item.Fields[n].ID == fieldName {
 			return item.Fields[n].Value
 		}
 	}
+
 	return ""
 }
