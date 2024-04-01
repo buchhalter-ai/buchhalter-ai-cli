@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -121,12 +120,13 @@ func UpdateIfAvailable(buchhalterConfigDirectory, repositoryUrl, currentChecksum
 	return nil
 }
 
-func SendMetrics(rd RunData, v string, c string) {
+func SendMetrics(rd RunData, v string, c string) error {
 	metricsUrl := viper.GetString("buchhalter_metrics_url")
 	rdx, err := json.Marshal(rd)
 	if err != nil {
-		log.Fatal("Error marshalling run data:", err)
+		return fmt.Errorf("error marshalling run data: %w", err)
 	}
+
 	md := Metric{
 		MetricType:    "runMetrics",
 		Data:          string(rdx),
@@ -138,33 +138,30 @@ func SendMetrics(rd RunData, v string, c string) {
 	}
 	mdj, err := json.Marshal(md)
 	if err != nil {
-		log.Fatal("Error marshalling run data:", err)
-		return
+		return fmt.Errorf("error marshalling run data: %w", err)
 	}
 
 	client := &http.Client{}
 	ctx := context.Background() // Consider using a meaningful context
 	req, err := http.NewRequestWithContext(ctx, "POST", metricsUrl, bytes.NewBuffer(mdj))
 	if err != nil {
-		log.Println("Error creating request:", err)
-		return
+		return fmt.Errorf("error creating request: %w", err)
 	}
+
+	// TODO Add CLI version to User-Agent, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/User-Agent
 	req.Header.Set("User-Agent", "buchhalter-cli")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Println("Error sending request:", err)
-		fmt.Printf("Response status: %s", resp.Status)
-		return
+		return fmt.Errorf("error sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
-		return
-	} else {
-		fmt.Printf("HTTP request failed with status code: %d", resp.StatusCode)
-		return
+		return nil
 	}
+
+	return fmt.Errorf("http request failed with status code: %d", resp.StatusCode)
 }
