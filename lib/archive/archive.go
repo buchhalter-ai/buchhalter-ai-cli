@@ -11,11 +11,9 @@ import (
 
 var fileHashes []string
 
-func BuildArchiveIndex(archiveDirectory string) {
-	/**
-	 * Iterate over all files in the archive directory and build an index with all existing file hashes
-	 * This index will be used to detect if a downloaded invoice/file is new or already exists
-	 */
+func BuildArchiveIndex(archiveDirectory string) error {
+	// Iterate over all files in the archive directory and build an index with all existing file hashes.
+	// This index will be used to detect if a downloaded invoice/file is new or already exists.
 	err := filepath.Walk(archiveDirectory, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -23,17 +21,17 @@ func BuildArchiveIndex(archiveDirectory string) {
 		if !info.IsDir() && info.Name()[0:1] != "_" && info.Name()[0:1] != "." {
 			hash, err := computeHash(path)
 			if err != nil {
-				fmt.Printf("Error computing hash for %s: %s\n", path, err)
-				return nil
+				return fmt.Errorf("error computing hash for %s: %w", path, err)
 			}
 			fileHashes = append(fileHashes, hash)
 		}
 		return nil
 	})
 	if err != nil {
-		fmt.Println("Error walking the directory:", err)
-		return
+		return fmt.Errorf("error walking the directory: %w", err)
 	}
+
+	return nil
 }
 
 func computeHash(filePath string) (string, error) {

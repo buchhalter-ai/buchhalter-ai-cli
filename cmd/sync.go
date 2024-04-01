@@ -86,7 +86,11 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 	t := "Build archive index"
 	p.Send(resultStatusUpdate{title: t})
 	archiveDirectory := viper.GetString("buchhalter_directory")
-	archive.BuildArchiveIndex(archiveDirectory)
+	err := archive.BuildArchiveIndex(archiveDirectory)
+	if err != nil {
+		// TODO Implement better error handling
+		fmt.Println(err)
+	}
 
 	if !viper.GetBool("dev") {
 		t = "Checking for repository updates"
