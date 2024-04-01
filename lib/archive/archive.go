@@ -7,15 +7,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/spf13/viper"
 )
 
 var fileHashes []string
 
-func BuildArchiveIndex() {
-	archiveDirectory := viper.GetString("buchhalter_directory")
-
+func BuildArchiveIndex(archiveDirectory string) {
 	/**
 	 * Iterate over all files in the archive directory and build an index with all existing file hashes
 	 * This index will be used to detect if a downloaded invoice/file is new or already exists

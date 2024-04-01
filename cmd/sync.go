@@ -85,7 +85,8 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password) {
 	t := "Build archive index"
 	p.Send(resultStatusUpdate{title: t})
-	archive.BuildArchiveIndex()
+	archiveDirectory := viper.GetString("buchhalter_directory")
+	archive.BuildArchiveIndex(archiveDirectory)
 
 	if !viper.GetBool("dev") {
 		t = "Checking for repository updates"
