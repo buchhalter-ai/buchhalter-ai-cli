@@ -246,8 +246,8 @@ func stepWaitFor(ctx context.Context, step parser.Step) utils.StepResult {
 func stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	var nodes []*cdp.Node
 	err := chromedp.Run(ctx, chromedp.Tasks{
-		chromedp.WaitReady(step.Selector, chromedp.BySearch),
-		chromedp.Nodes(step.Selector, &nodes, chromedp.BySearch),
+		chromedp.WaitReady(step.Selector),
+		chromedp.Nodes(step.Selector, &nodes),
 	})
 	if err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
