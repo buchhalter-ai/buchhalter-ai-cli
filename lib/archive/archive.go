@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 )
 
+// TODO Check if this can be replaced by a hashmap for better performance.
+
 var fileHashes []string
 
 func BuildArchiveIndex(archiveDirectory string) error {
