@@ -183,7 +183,12 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 }
 
 func prepareRecipes(provider string, vaultProvider *vault.Provider1Password) []recipeToExecute {
-	parser.LoadRecipes()
+	loadRecipeResult, err := parser.LoadRecipes()
+	if err != nil {
+		// TODO Implement better error handling
+		fmt.Println(loadRecipeResult)
+		fmt.Println(err)
+	}
 
 	// Run single provider recipe
 	var r []recipeToExecute

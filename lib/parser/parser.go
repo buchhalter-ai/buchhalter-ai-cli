@@ -1,14 +1,14 @@
 package parser
 
 import (
-	"buchhalter/lib/vault"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"buchhalter/lib/vault"
 
 	"github.com/spf13/viper"
 	"github.com/xeipuuv/gojsonschema"
@@ -64,46 +64,52 @@ type Step struct {
 
 type Urls []string
 
-func ValidateRecipes() bool {
+func ValidateRecipes() (bool, error) {
 	schemaLoader := gojsonschema.NewReferenceLoader("file://schema/oicdb.schema.json")
 	documentLoader := gojsonschema.NewReferenceLoader("file://" + filepath.Join(viper.GetString("buchhalter_config_directory"), "oicdb.json"))
 
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
 	if err != nil {
-		panic(err.Error())
+		return false, err
 	}
 
 	if result.Valid() {
-		return true
-	} else {
-		fmt.Printf("The document is not valid. see errors :\n")
-		for _, desc := range result.Errors() {
-			fmt.Printf("- %s\n", desc)
-		}
-		return false
+		return true, nil
 	}
+
+	fmt.Printf("The document is not valid. see errors :\n")
+	for _, desc := range result.Errors() {
+		fmt.Printf("- %s\n", desc)
+	}
+	return false, nil
 }
 
-func LoadRecipes() bool {
-	ValidateRecipes()
+func LoadRecipes() (bool, error) {
+	validationResult, err := ValidateRecipes()
+	if err != nil {
+		return validationResult, err
+	}
+
 	dbFile, err := os.Open(filepath.Join(viper.GetString("buchhalter_config_directory"), "oicdb.json"))
 	if err != nil {
-		fmt.Println(err)
-		return false
+		return false, err
 	}
 	defer dbFile.Close()
 	byteValue, _ := io.ReadAll(dbFile)
 
 	err = json.Unmarshal(byteValue, &db)
 	if err != nil {
-		log.Fatal(err)
+		return false, err
 	}
 	OicdbVersion = db.Version
 
 	/** Create local recipes directory if not exists */
 	if viper.GetBool("dev") {
 		OicdbVersion = OicdbVersion + "-dev"
-		loadLocalRecipes()
+		err = loadLocalRecipes()
+		if err != nil {
+			return false, err
+		}
 	}
 
 	for i := 0; i < len(db.Recipes); i++ {
@@ -113,24 +119,24 @@ func LoadRecipes() bool {
 		RecipeByProvider[db.Recipes[i].Provider] = db.Recipes[i]
 	}
 
-	return true
+	return true, nil
 }
 
-func loadLocalRecipes() {
+func loadLocalRecipes() error {
 	sf := "_local/recipes"
 	bd := viper.GetString("buchhalter_directory")
 	recipesDir := filepath.Join(bd, sf)
 	if _, err := os.Stat(recipesDir); os.IsNotExist(err) {
 		err := os.Mkdir(recipesDir, 0755)
 		if err != nil {
-			panic(err)
+			return err
 		}
 	}
 
 	/** Load local recipes */
 	files, err := os.ReadDir(recipesDir) // Replace ioutil.ReadDir with os.ReadDir
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	for _, file := range files {
@@ -139,12 +145,12 @@ func loadLocalRecipes() {
 		filenameWithoutExtension := filename[0 : len(filename)-len(extension)]
 		recipeFile, err := os.Open(filepath.Join(bd, sf, filename))
 		if err != nil {
-			fmt.Println(err)
+			return err
 		}
 		defer recipeFile.Close()
 		byteValue, err := io.ReadAll(recipeFile)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		n := getRecipeIndexByProvider(filenameWithoutExtension)
 		if n >= 0 {
@@ -152,7 +158,7 @@ func loadLocalRecipes() {
 			var newRecipe Recipe
 			err = json.Unmarshal(byteValue, &newRecipe)
 			if err != nil {
-				log.Fatal(err)
+				return err
 			}
 			db.Recipes[n] = newRecipe
 		} else {
@@ -160,11 +166,13 @@ func loadLocalRecipes() {
 			var recipe Recipe
 			err = json.Unmarshal(byteValue, &recipe)
 			if err != nil {
-				log.Fatal(err)
+				return err
 			}
 			db.Recipes = append(db.Recipes, recipe)
 		}
 	}
+
+	return nil
 }
 
 func getRecipeIndexByProvider(provider string) int {
@@ -173,6 +181,7 @@ func getRecipeIndexByProvider(provider string) int {
 			return i
 		}
 	}
+
 	return -1
 }
 
