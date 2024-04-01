@@ -38,9 +38,7 @@ type RunDataProvider struct {
 	NewFilesCount    int     `json:"newFilesCount,omitempty"`
 }
 
-func updateExists() (bool, error) {
-	repositoryUrl := viper.GetString("buchhalter_repository_url")
-	currentChecksum := viper.GetString("buchhalter_repository_checksum")
+func updateExists(repositoryUrl, currentChecksum string) (bool, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -75,7 +73,8 @@ func updateExists() (bool, error) {
 
 func UpdateIfAvailable() error {
 	repositoryUrl := viper.GetString("buchhalter_repository_url")
-	updateExists, err := updateExists()
+	currentChecksum := viper.GetString("buchhalter_repository_checksum")
+	updateExists, err := updateExists(repositoryUrl, currentChecksum)
 	if err != nil {
 		fmt.Printf("You're offline. Please connect to the internet for using buchhalter-cli")
 		os.Exit(1)
