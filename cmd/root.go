@@ -95,10 +95,15 @@ func initConfig() {
 
 	// Check if config file exists or create it
 	if _, err := os.Stat(cf); os.IsNotExist(err) {
-		utils.CreateDirectoryIfNotExists(bbd)
+		err := utils.CreateDirectoryIfNotExists(bbd)
+		if err != nil {
+			fmt.Println("Error creating config directory:", err)
+			os.Exit(1)
+		}
+
 		s := uuid.New().String()
 		viper.Set("buchhalter_secret", s)
-		err := viper.WriteConfigAs(cf)
+		err = viper.WriteConfigAs(cf)
 		if err != nil {
 			fmt.Println("Error creating config file:", err)
 			os.Exit(1)
@@ -114,7 +119,11 @@ func initConfig() {
 	}
 
 	// Create main directory if not exists
-	utils.CreateDirectoryIfNotExists(bd)
+	err = utils.CreateDirectoryIfNotExists(bd)
+	if err != nil {
+		fmt.Println("Error creating main directory:", err)
+		os.Exit(1)
+	}
 
 	// Log settings
 	lx, _ := rootCmd.Flags().GetBool("log")

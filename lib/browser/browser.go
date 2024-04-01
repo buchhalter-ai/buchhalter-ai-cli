@@ -53,7 +53,11 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 	defer cancel()
 
 	// create download directories
-	downloadsDirectory, documentsDirectory = utils.InitProviderDirectories(recipe.Provider)
+	downloadsDirectory, documentsDirectory, err = utils.InitProviderDirectories(recipe.Provider)
+	if err != nil {
+		// TODO Implement error handling
+		fmt.Println(err)
+	}
 
 	// get chrome version for metrics
 	if ChromeVersion == "" {
@@ -148,7 +152,11 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 					LastErrorMessage:    lsr.Message,
 					NewFilesCount:       newFilesCount,
 				}
-				utils.TruncateDirectory(downloadsDirectory)
+				err = utils.TruncateDirectory(downloadsDirectory)
+				if err != nil {
+					// TODO Implement error handling
+					fmt.Println(err)
+				}
 				return result
 			}
 		case <-time.After(recipeTimeout):
@@ -160,7 +168,11 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 				LastStepDescription: step.Description,
 				NewFilesCount:       newFilesCount,
 			}
-			utils.TruncateDirectory(downloadsDirectory)
+			err = utils.TruncateDirectory(downloadsDirectory)
+			if err != nil {
+				// TODO Implement error handling
+				fmt.Println(err)
+			}
 			return result
 		}
 		cs = (float64(bcs) + float64(n)) / float64(tsc)
@@ -168,7 +180,11 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 		n++
 	}
 
-	utils.TruncateDirectory(downloadsDirectory)
+	err = utils.TruncateDirectory(downloadsDirectory)
+	if err != nil {
+		// TODO Implement error handling
+		fmt.Println(err)
+	}
 	return result
 }
 

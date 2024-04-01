@@ -53,7 +53,12 @@ type HiddenInputFields struct {
 
 func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials) utils.RecipeResult {
 	//Init directories
-	downloadsDirectory, documentsDirectory = utils.InitProviderDirectories(recipe.Provider)
+	var err error
+	downloadsDirectory, documentsDirectory, err = utils.InitProviderDirectories(recipe.Provider)
+	if err != nil {
+		// TODO Implement error handling
+		fmt.Println(err)
+	}
 
 	//Init browser
 	ctx, cancel, err := cu.New(cu.NewConfig(
@@ -190,7 +195,11 @@ func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step par
 		return utils.StepResult{Status: "success"}
 	}
 
-	verifier, challenge, _ := utils.Oauth2Pkce(oauth2PkceVerifierLength)
+	verifier, challenge, err := utils.Oauth2Pkce(oauth2PkceVerifierLength)
+	if err != nil {
+		// TODO implement error handling
+		fmt.Println(err)
+	}
 	state := utils.RandomString(20)
 	params := url.Values{}
 	params.Add("client_id", oauth2ClientId)

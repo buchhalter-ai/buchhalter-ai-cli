@@ -52,13 +52,19 @@ type RecipeResult struct {
 	NewFilesCount       int
 }
 
-func InitProviderDirectories(provider string) (string, string) {
+func InitProviderDirectories(provider string) (string, string, error) {
 	wd := viper.GetString("buchhalter_directory")
 	downloadsDirectory = filepath.Join(wd, "_tmp", provider)
 	documentsDirectory = filepath.Join(wd, provider)
-	CreateDirectoryIfNotExists(downloadsDirectory)
-	CreateDirectoryIfNotExists(documentsDirectory)
-	return downloadsDirectory, documentsDirectory
+	err := CreateDirectoryIfNotExists(downloadsDirectory)
+	if err != nil {
+		return "", "", err
+	}
+	err = CreateDirectoryIfNotExists(documentsDirectory)
+	if err != nil {
+		return downloadsDirectory, "", err
+	}
+	return downloadsDirectory, documentsDirectory, nil
 }
 
 func CreateDirectoryIfNotExists(path string) error {
@@ -173,12 +179,13 @@ func RandomString(length int) string {
 	return encode(result)[:length]
 }
 
-func Oauth2Pkce(length int) (verifier, challenge string, err error) {
-	verifier = RandomString(length)
+func Oauth2Pkce(length int) (string, string, error) {
+	verifier := RandomString(length)
 	hasher := sha256.New()
-	hasher.Write([]byte(verifier))
-	challenge = encode(hasher.Sum(nil))
-	return verifier, challenge, nil
+	_, err := hasher.Write([]byte(verifier))
+	challenge := encode(hasher.Sum(nil))
+
+	return verifier, challenge, err
 }
 
 func encode(msg []byte) string {
