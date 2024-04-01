@@ -140,7 +140,7 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 
 		switch r[i].recipe.Type {
 		case "browser":
-			recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials)
+			recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterDirectory)
 			if ChromeVersion == "" {
 				ChromeVersion = browser.ChromeVersion
 			}

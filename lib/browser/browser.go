@@ -1,10 +1,6 @@
 package browser
 
 import (
-	"buchhalter/lib/archive"
-	"buchhalter/lib/parser"
-	"buchhalter/lib/utils"
-	"buchhalter/lib/vault"
 	"context"
 	"fmt"
 	"io/fs"
@@ -16,6 +12,11 @@ import (
 	"sync"
 	"time"
 
+	"buchhalter/lib/archive"
+	"buchhalter/lib/parser"
+	"buchhalter/lib/utils"
+	"buchhalter/lib/vault"
+
 	cu "github.com/Davincible/chromedp-undetected"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -25,7 +26,6 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -38,7 +38,7 @@ var (
 	newFilesCount      = 0
 )
 
-func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials) utils.RecipeResult {
+func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials, buchhalterDirectory string) utils.RecipeResult {
 	// New creates a new context for use with chromedp. With this context
 	// you can use chromedp as you normally would.
 	ctx, cancel, err := cu.New(cu.NewConfig(
@@ -54,7 +54,6 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 	defer cancel()
 
 	// create download directories
-	buchhalterDirectory := viper.GetString("buchhalter_directory")
 	downloadsDirectory, documentsDirectory, err = utils.InitProviderDirectories(buchhalterDirectory, recipe.Provider)
 	if err != nil {
 		// TODO Implement error handling
