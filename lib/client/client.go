@@ -60,12 +60,13 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 		fmt.Println(err)
 	}
 
-	//Init browser
+	// Init browser
 	ctx, cancel, err := cu.New(cu.NewConfig(
 		cu.WithContext(browserCtx),
 	))
 
 	if err != nil {
+		// TODO Implement error handling
 		panic(err)
 	}
 	defer cancel()
@@ -77,6 +78,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 			chromedp.Text(`#version`, &ChromeVersion, chromedp.NodeVisible),
 		})
 		if err != nil {
+			// TODO Implement error handling
 			log.Fatal(err)
 		}
 		ChromeVersion = strings.TrimSpace(ChromeVersion)
@@ -88,7 +90,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 	for _, step := range recipe.Steps {
 		sr := make(chan utils.StepResult, 1)
 		p.Send(utils.ResultTitleAndDescriptionUpdate{Title: "Downloading invoices from " + recipe.Provider + " (" + strconv.Itoa(n) + "/" + strconv.Itoa(scs) + "):", Description: step.Description})
-		/** Timeout recipe if something goes wrong */
+		// Timeout recipe if something goes wrong
 		go func() {
 			switch step.Action {
 			case "oauth2-setup":
@@ -101,6 +103,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 				sr <- stepOauth2PostAndGetItems(ctx, step)
 			}
 		}()
+
 		select {
 		case lsr := <-sr:
 			newDocumentsText := strconv.Itoa(newFilesCount) + " new documents"
@@ -133,6 +136,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 					return result
 				}
 			}
+
 		case <-time.After(recipeTimeout):
 			result = utils.RecipeResult{
 				Status:              "error",
@@ -144,6 +148,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 			}
 			return result
 		}
+
 		cs = (float64(bcs) + float64(n)) / float64(tsc)
 		p.Send(utils.ResultProgressUpdate{Percent: cs})
 		n++
@@ -160,6 +165,7 @@ func stepOauth2Setup(step parser.Step) utils.StepResult {
 	oauth2Scope = step.Oauth2.Scope
 	oauth2PkceMethod = step.Oauth2.PkceMethod
 	oauth2PkceVerifierLength = step.Oauth2.PkceVerifierLength
+
 	return utils.StepResult{Status: "success", Message: "Successfully set up OAuth2 settings."}
 }
 
@@ -168,10 +174,11 @@ func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step pars
 	pii := recipe.Provider + "|" + credentials.Id
 	tokens, err := secrets.GetOauthAccessTokenFromCache(pii, buchhalterConfigDirectory)
 
-	if err == nil {
+	if err != nil {
 		if validOauth2AuthToken(tokens) {
 			oauth2AuthToken = tokens.AccessToken
 			return utils.StepResult{Status: "success", Message: "Found valid oauth2 access token in cache"}
+
 		} else {
 			payload := []byte(`{
 "grant_type": "refresh_token",
@@ -186,6 +193,7 @@ func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step pars
 			}
 		}
 	}
+
 	return utils.StepResult{Status: "error", Message: "No access token found. New OAuth2 login needed."}
 }
 
@@ -199,6 +207,7 @@ func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step par
 		// TODO implement error handling
 		fmt.Println(err)
 	}
+
 	state := utils.RandomString(20)
 	params := url.Values{}
 	params.Add("client_id", oauth2ClientId)
@@ -247,6 +256,7 @@ func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step par
 	if err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
+
 	oauth2AuthToken = tokens.AccessToken
 	return utils.StepResult{Status: "success", Message: "Successfully retrieved OAuth2 tokens."}
 }
@@ -258,7 +268,7 @@ func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step) utils.Step
 		return utils.StepResult{Status: "error", Message: "error creating post request", Break: true}
 	}
 
-	//Set headers
+	// Set headers
 	req.Header.Set("Content-Type", "application/json")
 	for n, h := range step.Headers {
 		if n == "Authorization" {
@@ -284,6 +294,7 @@ func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step) utils.Step
 		var jsr interface{}
 		err := json.Unmarshal(body, &jsr)
 		if err != nil {
+			// TODO Implement better error handling
 			panic(err)
 		}
 
@@ -312,7 +323,11 @@ func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step) utils.Step
 				filename = filepath.Join(id, ".pdf")
 
 			}
-			downloadSuccessful := doRequest(ctx, url, step.DocumentRequestMethod, step.DocumentRequestHeaders, f, nil)
+			downloadSuccessful, err := doRequest(ctx, url, step.DocumentRequestMethod, step.DocumentRequestHeaders, f, nil)
+			if err != nil {
+				// TODO implement error handling
+				fmt.Println(err)
+			}
 			if !downloadSuccessful {
 				return utils.StepResult{Status: "error", Message: "Error while downloading invoices"}
 			}
@@ -330,16 +345,17 @@ func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step) utils.Step
 	} else if resp.StatusCode == 400 {
 		return utils.StepResult{Status: "error"}
 	}
+
 	return utils.StepResult{Status: "error"}
 }
 
-func doRequest(ctx context.Context, url string, method string, headers map[string]string, filename string, payload []byte) bool {
+func doRequest(ctx context.Context, url string, method string, headers map[string]string, filename string, payload []byte) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(payload))
 	if err != nil {
-		return false
+		return false, err
 	}
 
-	//Set headers
+	// Set headers
 	req.Header.Set("Content-Type", "application/json")
 	for n, h := range headers {
 		if n == "Authorization" {
@@ -350,21 +366,22 @@ func doRequest(ctx context.Context, url string, method string, headers map[strin
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return false
+		return false, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
 		out, err := os.Create(filename)
 		if err != nil {
-			return false
+			return false, err
 		}
 		defer out.Close()
 
 		_, err = io.Copy(out, resp.Body)
-		return err == nil
+		return err == nil, err
 	}
-	return false
+
+	return false, nil
 }
 
 func getOauth2Tokens(ctx context.Context, payload []byte, step parser.Step, pii, buchhalterConfigDirectory string) (secrets.Oauth2Tokens, error) {
@@ -373,15 +390,16 @@ func getOauth2Tokens(ctx context.Context, payload []byte, step parser.Step, pii,
 	if err != nil {
 		return tj, fmt.Errorf("failed to create request: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return tj, errors.New("failed to send oauth2 token request")
+		return tj, fmt.Errorf("failed to send oauth2 token request: %w", err)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return tj, errors.New("error reading oauth2 token response body")
+		return tj, fmt.Errorf("error reading oauth2 token response body: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -395,10 +413,12 @@ func getOauth2Tokens(ctx context.Context, payload []byte, step parser.Step, pii,
 		if err != nil {
 			return tj, fmt.Errorf("error storing Oauth2 token ti file: %w", err)
 		}
+
 		return tj, nil
 	} else if resp.StatusCode == 400 {
 		return tj, errors.New("unauthorized error while trying to get oauth2 access token with refresh token")
 	}
+
 	return tj, errors.New("unknown error getting oauth2 token")
 }
 
@@ -486,8 +506,10 @@ func extractJsonRecursive(data interface{}, keys []string) []string {
 	return results
 }
 
-func Quit() {
+func Quit() error {
 	if browserCtx != nil {
-		_ = chromedp.Cancel(browserCtx)
+		return chromedp.Cancel(browserCtx)
 	}
+
+	return nil
 }
