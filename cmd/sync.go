@@ -48,7 +48,8 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	if len(cmdArgs) > 0 {
 		provider = cmdArgs[0]
 	}
-	p := tea.NewProgram(initialModel())
+	viewModel := initialModel()
+	p := tea.NewProgram(viewModel)
 
 	vaultConfigBinary := viper.GetString("one_password_cli_command")
 	vaultConfigBase := viper.GetString("one_password_base")
@@ -59,6 +60,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
 		os.Exit(1)
 	}
+	viewModel.vaultProvider = vaultProvider
 
 	// Load vault items/try to connect to vault
 	vaultItems, err := vaultProvider.LoadVaultItems()
@@ -165,7 +167,7 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 
 	if viper.GetBool("buchhalter_always_send_metrics") {
 		metricsUrl := viper.GetString("buchhalter_metrics_url")
-		err = repository.SendMetrics(metricsUrl, RunData, CliVersion, ChromeVersion)
+		err = repository.SendMetrics(metricsUrl, RunData, CliVersion, ChromeVersion, vaultProvider.Version)
 		if err != nil {
 			// TODO Implement better error handling
 			fmt.Println(err)
@@ -221,9 +223,9 @@ func prepareRecipes(provider string, vaultProvider *vault.Provider1Password) []r
 	return r
 }
 
-func sendMetrics(a bool) {
+func sendMetrics(a bool, vaultVersion string) {
 	metricsUrl := viper.GetString("buchhalter_metrics_url")
-	err := repository.SendMetrics(metricsUrl, RunData, CliVersion, ChromeVersion)
+	err := repository.SendMetrics(metricsUrl, RunData, CliVersion, ChromeVersion, vaultVersion)
 	if err != nil {
 		// TODO Implement better error handling
 		fmt.Println(err)
@@ -265,6 +267,8 @@ type model struct {
 	hasError      bool
 	cursor        int
 	choice        string
+
+	vaultProvider *vault.Provider1Password
 }
 
 type quitMsg struct{}
@@ -354,7 +358,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = "sync"
 			switch m.choice {
 			case "Yes":
-				sendMetrics(false)
+				sendMetrics(false, m.vaultProvider.Version)
 				mn := quit(m)
 				return mn, tea.Quit
 
@@ -363,7 +367,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return mn, tea.Quit
 
 			case "Always yes (don't ask again)":
-				sendMetrics(true)
+				sendMetrics(true, m.vaultProvider.Version)
 				mn := quit(m)
 				return mn, tea.Quit
 			}

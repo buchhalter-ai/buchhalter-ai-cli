@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"buchhalter/lib/parser"
-	"buchhalter/lib/vault"
 )
 
 type Metric struct {
@@ -119,8 +118,8 @@ func UpdateIfAvailable(buchhalterConfigDirectory, repositoryUrl, currentChecksum
 	return nil
 }
 
-func SendMetrics(metricsUrl string, rd RunData, v string, c string) error {
-	rdx, err := json.Marshal(rd)
+func SendMetrics(metricsUrl string, runData RunData, cliVersion, chromeVersion, vaultVersion string) error {
+	rdx, err := json.Marshal(runData)
 	if err != nil {
 		return fmt.Errorf("error marshalling run data: %w", err)
 	}
@@ -128,10 +127,10 @@ func SendMetrics(metricsUrl string, rd RunData, v string, c string) error {
 	md := Metric{
 		MetricType:    "runMetrics",
 		Data:          string(rdx),
-		CliVersion:    v,
+		CliVersion:    cliVersion,
 		OicdbVersion:  parser.OicdbVersion,
-		VaultVersion:  vault.VaultVersion,
-		ChromeVersion: c,
+		VaultVersion:  vaultVersion,
+		ChromeVersion: chromeVersion,
 		OS:            runtime.GOOS,
 	}
 	mdj, err := json.Marshal(md)

@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-var VaultVersion string
-
 func GetProvider(provider, binary, base, tag string) (*Provider1Password, error) {
 	switch provider {
 	case PROVIDER_1PASSWORD:

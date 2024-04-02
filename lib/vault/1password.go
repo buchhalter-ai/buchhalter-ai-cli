@@ -57,10 +57,6 @@ func (p *Provider1Password) initializeVaultversion() error {
 	}
 	p.Version = strings.TrimSpace(string(version))
 
-	// TODO Remove global variable VaultVersion
-	// Kept for legacy reasons (sendMetrics)
-	VaultVersion = p.Version
-
 	return nil
 }
 
