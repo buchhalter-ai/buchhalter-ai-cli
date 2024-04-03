@@ -1,17 +1,18 @@
 # buchhalter command line tool
 
-buchhalter-cli is a command line tool that downloads invoices from suppliers automatically.
-It uses the [open invoice collector database](https://github.com/oicdb/oicdb-repository) by default.
-You can use the `--dev` mode to overwrite recipes for a specific provider with your local ones.
+buchhalter-cli is a command line tool (CLI) that downloads invoices from suppliers automatically.
+It uses the [open invoice collector database](https://github.com/oicdb/oicdb-repository) (OICDB) by default.
 
 ## Installation
 
-You can install the buchhalter-cli by cloning the repository and running the main.go file.
+Install the buchhalter-cli by cloning the repository and running the main.go file.
 We also plan to provide a brew package (WIP).
 
 ```sh
 git clone git@github.com:buchhalter-ai/buchhalter-ai-cli.git
 cd buchhalter-ai-cli
+make build
+bin/buchhalter --help
 ```
 
 ## Usage
@@ -44,6 +45,59 @@ Example: Load the latest invoices from Hetzner Cloud only (using the default rec
 ```sh
 go run main.go sync hetzner
 ```
+
+## Configuration
+
+The configuration file `~/.buchhalter/.buchhalter.yaml` will be automatically created on startup.
+The following settings are available for configuration:
+
+| Setting                          | Type   | Default                                           | Description |
+| -------------------------------- | ------ | ------------------------------------------------- | ----------- |
+| `one_password_cli_command`       | String |                                                   | Path to the 1Password CLI binary. If not configued, the binary will be automatically detected on the systems `$PATH`. |
+| `one_password_base    `          | String | `Base`                                            | Name of the 1Password vault buchhalter-cli will query. Only items inside this vault are considered. Useful to limit the scope. If empty, buchhalter-cli will query all accessible items based on your login. See [Create and share vaults](https://support.1password.com/create-share-vaults/). |
+| `one_password_tag`               | String | `buchhalter-ai`                                   | Name of the 1Password item tag buchhalter-cli will query. Only items with this particular tag are considered. Useful to limit the scope. If empty, buchhalter-cli will query all items in your vault. See [Organize with favorites and tags](https://support.1password.com/favorites-tags/) |
+| `buchhalter_directory`           | String | `~/buchhalter/`                                   | Directory to store the invoices from suppliers into. |
+| `buchhalter_config_directory`    | String | `~/.buchhalter/`                                  | Directory to store the buchhalter configuration. |
+| `buchhalter_repository_url`      | String | `https://app.buchhalter.ai/api/cli/repository`    | API endpoint to download the latest OICDB invoice recipes. |
+| `buchhalter_metrics_url`         | String | `https://app.buchhalter.ai/api/cli/metrics`       | API endpoint to send usage metrics. Disabled by default. Needs user agreement. |
+| `buchhalter_always_send_metrics` | Bool   | `false`       | Activate / deactivate sending usage metrics to `buchhalter_metrics_url`. |
+| `dev`                            | Bool   | `false`       | Activate / deactivate development mode for _buchhalter-cli_ (without updates and sending metrics). |
+
+The configuration file is in YAML format.
+An example looks like:
+
+```yaml
+one_password_cli_command: "/opt/homebrew/bin/op"
+one_password_base: "ACME Corp"
+one_password_tag: "invoice"
+buchhalter_always_send_metrics: True
+```
+
+## Command line arguments and flags
+
+All command line arguments and flags are available via `buchhalter --help`:
+
+```sh
+Usage:
+  buchhalter [command]
+
+Available Commands:
+  help        Help about any command
+  sync        Synchronize all invoices from your suppliers
+  version     Output the version info
+
+Flags:
+  -d, --dev    development mode (e.g. without OICDB recipe updates and sending metrics)
+  -h, --help   help for buchhalter
+  -l, --log    log debug output
+
+Use "buchhalter [command] --help" for more information about a command.
+```
+
+The `--dev` flag enables the development mode.
+In this mode particular activities are skipped like checking the buchhalter api for a new version of OICDB invoice recipes or the transfer of usage metrics to the buchhalter API.
+
+The `--log` flag will write a activities into a log file placed at `<buchhalter_directory>/buchhalter-cli.log` (default: `~/buchhalter/buchhalter-cli.log`).
 
 ## Local invoice storage
 
