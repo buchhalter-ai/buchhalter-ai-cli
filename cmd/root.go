@@ -79,37 +79,37 @@ func init() {
 }
 
 func initConfig() {
-	hd, _ := os.UserHomeDir()
-	bbd := filepath.Join(hd, ".buchhalter")
-	cf := filepath.Join(bbd, ".buchhalter.yaml")
-	bd := filepath.Join(hd, "buchhalter")
+	homeDir, _ := os.UserHomeDir()
+	buchhalterConfigDir := filepath.Join(homeDir, ".buchhalter")
+	configFile := filepath.Join(buchhalterConfigDir, ".buchhalter.yaml")
+	buchhalterDir := filepath.Join(homeDir, "buchhalter")
 
 	// Set default values for viper config
 	viper.SetDefault("one_password_cli_command", "")
 	viper.SetDefault("one_password_base", "Base")
 	viper.SetDefault("one_password_tag", "buchhalter-ai")
-	viper.SetDefault("buchhalter_directory", bd)
-	viper.SetDefault("buchhalter_config_directory", bbd)
+	viper.SetDefault("buchhalter_directory", buchhalterDir)
+	viper.SetDefault("buchhalter_config_directory", buchhalterConfigDir)
 	viper.SetDefault("buchhalter_repository_url", "https://app.buchhalter.ai/api/cli/repository")
 	viper.SetDefault("buchhalter_metrics_url", "https://app.buchhalter.ai/api/cli/metrics")
 
 	// Check if config file exists or create it
-	if _, err := os.Stat(cf); os.IsNotExist(err) {
-		err := utils.CreateDirectoryIfNotExists(bbd)
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		err := utils.CreateDirectoryIfNotExists(buchhalterConfigDir)
 		if err != nil {
 			fmt.Println("Error creating config directory:", err)
 			os.Exit(1)
 		}
 
-		s := uuid.New().String()
-		viper.Set("buchhalter_secret", s)
-		err = viper.WriteConfigAs(cf)
+		secret := uuid.New().String()
+		viper.Set("buchhalter_secret", secret)
+		err = viper.WriteConfigAs(configFile)
 		if err != nil {
 			fmt.Println("Error creating config file:", err)
 			os.Exit(1)
 		}
 	}
-	viper.SetConfigFile(cf)
+	viper.SetConfigFile(configFile)
 
 	// Initialize viper config
 	err := viper.ReadInConfig()
@@ -119,16 +119,16 @@ func initConfig() {
 	}
 
 	// Create main directory if not exists
-	err = utils.CreateDirectoryIfNotExists(bd)
+	err = utils.CreateDirectoryIfNotExists(buchhalterDir)
 	if err != nil {
 		fmt.Println("Error creating main directory:", err)
 		os.Exit(1)
 	}
 
 	// Log settings
-	lx, _ := rootCmd.Flags().GetBool("log")
-	if lx {
-		fileName := filepath.Join(bd, "buchhalter-cli.log")
+	logSetting, _ := rootCmd.Flags().GetBool("log")
+	if logSetting {
+		fileName := filepath.Join(buchhalterDir, "buchhalter-cli.log")
 		logFile, err := os.OpenFile(fileName, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			log.Panic(err)
@@ -136,6 +136,7 @@ func initConfig() {
 		defer logFile.Close()
 		log.SetOutput(logFile)
 		log.SetFlags(log.Lshortfile | log.LstdFlags)
+
 	} else {
 		log.SetOutput(io.Discard)
 	}
