@@ -48,8 +48,6 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	if len(cmdArgs) > 0 {
 		provider = cmdArgs[0]
 	}
-	viewModel := initialModel()
-	p := tea.NewProgram(viewModel)
 
 	vaultConfigBinary := viper.GetString("one_password_cli_command")
 	vaultConfigBase := viper.GetString("one_password_base")
@@ -60,7 +58,9 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
 		os.Exit(1)
 	}
-	viewModel.vaultProvider = vaultProvider
+
+	viewModel := initialModel(vaultProvider)
+	p := tea.NewProgram(viewModel)
 
 	// Load vault items/try to connect to vault
 	vaultItems, err := vaultProvider.LoadVaultItems()
@@ -316,7 +316,7 @@ type ResultProgressUpdate struct {
 type tickMsg time.Time
 
 // initialModel returns the model for the bubbletea application.
-func initialModel() model {
+func initialModel(vaultProvider *vault.Provider1Password) model {
 	const numLastResults = 5
 
 	s := spinner.New()
@@ -332,6 +332,7 @@ func initialModel() model {
 		spinner:       s,
 		results:       make([]resultMsg, numLastResults),
 		hasError:      false,
+		vaultProvider: vaultProvider,
 	}
 
 	return m
