@@ -137,7 +137,8 @@ func initConfig() {
 		fileName := filepath.Join(buchhalterDir, "buchhalter-cli.log")
 		logFile, err := os.OpenFile(fileName, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			log.Panic(err)
+			fmt.Printf("Can't open %s for logging: %+v\n", fileName, err)
+			os.Exit(1)
 		}
 		defer logFile.Close()
 		log.SetOutput(logFile)
