@@ -40,7 +40,7 @@ func updateExists(repositoryUrl, currentChecksum string) (bool, error) {
 		Timeout: 10 * time.Second,
 	}
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, "HEAD", repositoryUrl, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, repositoryUrl, nil)
 	if err != nil {
 		return false, err
 	}
@@ -67,7 +67,7 @@ func updateExists(repositoryUrl, currentChecksum string) (bool, error) {
 		return false, fmt.Errorf("update failed with checksum mismatch")
 	}
 
-	return false, fmt.Errorf("http request failed with status code: %d", resp.StatusCode)
+	return false, fmt.Errorf("http request to %s failed with status code: %d", repositoryUrl, resp.StatusCode)
 }
 
 func UpdateIfAvailable(buchhalterConfigDirectory, repositoryUrl, currentChecksum string) error {
@@ -82,7 +82,7 @@ func UpdateIfAvailable(buchhalterConfigDirectory, repositoryUrl, currentChecksum
 			Timeout: 10 * time.Second,
 		}
 		ctx := context.Background()
-		req, err := http.NewRequestWithContext(ctx, "GET", repositoryUrl, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, repositoryUrl, nil)
 		if err != nil {
 			if err != nil {
 				return err
@@ -111,8 +111,9 @@ func UpdateIfAvailable(buchhalterConfigDirectory, repositoryUrl, currentChecksum
 				return fmt.Errorf("error copying response body to file: %w", err)
 			}
 
+			return nil
 		}
-		return fmt.Errorf("http request failed with status code: %d", resp.StatusCode)
+		return fmt.Errorf("http request to %s failed with status code: %d", repositoryUrl, resp.StatusCode)
 	}
 
 	return nil
@@ -140,7 +141,7 @@ func SendMetrics(metricsUrl string, runData RunData, cliVersion, chromeVersion, 
 
 	client := &http.Client{}
 	ctx := context.Background() // Consider using a meaningful context
-	req, err := http.NewRequestWithContext(ctx, "POST", metricsUrl, bytes.NewBuffer(mdj))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricsUrl, bytes.NewBuffer(mdj))
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
@@ -160,5 +161,5 @@ func SendMetrics(metricsUrl string, runData RunData, cliVersion, chromeVersion, 
 		return nil
 	}
 
-	return fmt.Errorf("http request failed with status code: %d", resp.StatusCode)
+	return fmt.Errorf("http request to %s failed with status code: %d", metricsUrl, resp.StatusCode)
 }
