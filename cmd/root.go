@@ -65,8 +65,12 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().BoolP("log", "l", false, "Log debug output")
-	rootCmd.PersistentFlags().BoolP("dev", "d", false, "Development mode without updates and sending metrics")
+
+	// Disable the `completion` command
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
+	rootCmd.PersistentFlags().BoolP("log", "l", false, "log debug output")
+	rootCmd.PersistentFlags().BoolP("dev", "d", false, "development mode (e.g. without OICDB recipe updates and sending metrics)")
 	err := viper.BindPFlag("dev", rootCmd.PersistentFlags().Lookup("dev"))
 	if err != nil {
 		log.Fatalf("Failed to bind 'dev' flag: %v", err)
