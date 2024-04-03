@@ -232,7 +232,11 @@ func sendMetrics(a bool, vaultVersion string) {
 	}
 	if a {
 		viper.Set("buchhalter_always_send_metrics", true)
-		_ = viper.WriteConfig()
+		err = viper.WriteConfig()
+		if err != nil {
+			// TODO Implement better error handling
+			fmt.Println(err)
+		}
 	}
 }
 
