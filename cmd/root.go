@@ -141,7 +141,7 @@ func initConfig() {
 		}
 		defer logFile.Close()
 		log.SetOutput(logFile)
-		log.SetFlags(log.Lshortfile | log.LstdFlags)
+		log.SetFlags(log.LstdFlags)
 
 	} else {
 		log.SetOutput(io.Discard)
