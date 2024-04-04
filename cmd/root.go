@@ -65,8 +65,12 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().BoolP("log", "l", false, "Log debug output")
-	rootCmd.PersistentFlags().BoolP("dev", "d", false, "Development mode without updates and sending metrics")
+
+	// Disable the `completion` command
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
+	rootCmd.PersistentFlags().BoolP("log", "l", false, "log debug output")
+	rootCmd.PersistentFlags().BoolP("dev", "d", false, "development mode (e.g. without OICDB recipe updates and sending metrics)")
 	err := viper.BindPFlag("dev", rootCmd.PersistentFlags().Lookup("dev"))
 	if err != nil {
 		log.Fatalf("Failed to bind 'dev' flag: %v", err)
@@ -92,6 +96,8 @@ func initConfig() {
 	viper.SetDefault("buchhalter_config_directory", buchhalterConfigDir)
 	viper.SetDefault("buchhalter_repository_url", "https://app.buchhalter.ai/api/cli/repository")
 	viper.SetDefault("buchhalter_metrics_url", "https://app.buchhalter.ai/api/cli/metrics")
+	viper.SetDefault("buchhalter_always_send_metrics", false)
+	viper.SetDefault("dev", false)
 
 	// Check if config file exists or create it
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
