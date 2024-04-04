@@ -53,9 +53,9 @@ The following settings are available for configuration:
 
 | Setting                          | Type   | Default                                           | Description |
 | -------------------------------- | ------ | ------------------------------------------------- | ----------- |
-| `password_provider_cli_command`       | String |                                                   | Path to the Password Manager CLI binary (e.g. `/usr/local/bin/op` for 1Password). If not configued, the binary will be automatically detected on the systems `$PATH`. |
-| `password_provider_vault    `          | String | `Base`                                            | Name of the vault inside your password manager buchhalter-cli will query. Only items inside this vault are considered. Useful to limit the scope. If empty, buchhalter-cli will query all accessible items based on your login. For 1Password, see [Create and share vaults](https://support.1password.com/create-share-vaults/). |
-| `password_provider_item_tag`               | String | `buchhalter-ai`                                   | Name of the item tag buchhalter-cli will query. Only items with this particular tag are considered. Useful to limit the scope. If empty, buchhalter-cli will query all items in your vault. For 1Password, see [Organize with favorites and tags](https://support.1password.com/favorites-tags/) |
+| `credential_provider_cli_command`       | String |                                                   | Path to the Password Manager CLI binary (e.g. `/usr/local/bin/op` for 1Password). If not configued, the binary will be automatically detected on the systems `$PATH`. |
+| `credential_provider_vault    `          | String | `Base`                                            | Name of the vault inside your password manager buchhalter-cli will query. Only items inside this vault are considered. Useful to limit the scope. If empty, buchhalter-cli will query all accessible items based on your login. For 1Password, see [Create and share vaults](https://support.1password.com/create-share-vaults/). |
+| `credential_provider_item_tag`               | String | `buchhalter-ai`                                   | Name of the item tag buchhalter-cli will query. Only items with this particular tag are considered. Useful to limit the scope. If empty, buchhalter-cli will query all items in your vault. For 1Password, see [Organize with favorites and tags](https://support.1password.com/favorites-tags/) |
 | `buchhalter_directory`           | String | `~/buchhalter/`                                   | Directory to store the invoices from suppliers into. |
 | `buchhalter_config_directory`    | String | `~/.buchhalter/`                                  | Directory to store the buchhalter configuration. |
 | `buchhalter_repository_url`      | String | `https://app.buchhalter.ai/api/cli/repository`    | API endpoint to download the latest OICDB invoice recipes. |
@@ -67,9 +67,9 @@ The configuration file is in YAML format.
 An example looks like:
 
 ```yaml
-password_provider_cli_command: "/opt/homebrew/bin/op"
-password_provider_vault: "ACME Corp"
-password_provider_item_tag: "invoice"
+credential_provider_cli_command: "/opt/homebrew/bin/op"
+credential_provider_vault: "ACME Corp"
+credential_provider_item_tag: "invoice"
 buchhalter_always_send_metrics: True
 ```
 
