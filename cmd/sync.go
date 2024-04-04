@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -68,6 +69,12 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
 		os.Exit(1)
 	}
+	if len(vaultItems) == 0 {
+		// TODO Add link with help article
+		fmt.Printf("No vault items found in vault '%s' with tag '%s'. Please check your 1password vault items.\n", vaultConfigBase, vaultConfigTag)
+		os.Exit(1)
+	}
+	log.Printf("Found %d vault items in vault '%s' with tag '%s'.\n", len(vaultItems), vaultConfigBase, vaultConfigTag)
 
 	// Check if vault items are available
 	if len(vaultItems) == 0 {
