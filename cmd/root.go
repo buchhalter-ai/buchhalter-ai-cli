@@ -89,7 +89,7 @@ func initConfig() {
 	buchhalterDir := filepath.Join(homeDir, "buchhalter")
 
 	// Set default values for viper config
-	viper.SetDefault("one_password_cli_command", "")
+	viper.SetDefault("password_provider_cli_command", "")
 	viper.SetDefault("one_password_base", "Base")
 	viper.SetDefault("one_password_tag", "buchhalter-ai")
 	viper.SetDefault("buchhalter_directory", buchhalterDir)

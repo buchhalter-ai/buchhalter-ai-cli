@@ -53,7 +53,7 @@ The following settings are available for configuration:
 
 | Setting                          | Type   | Default                                           | Description |
 | -------------------------------- | ------ | ------------------------------------------------- | ----------- |
-| `one_password_cli_command`       | String |                                                   | Path to the 1Password CLI binary. If not configued, the binary will be automatically detected on the systems `$PATH`. |
+| `password_provider_cli_command`       | String |                                                   | Path to the Password Manager CLI binary (e.g. `/usr/local/bin/op` for 1Password). If not configued, the binary will be automatically detected on the systems `$PATH`. |
 | `one_password_base    `          | String | `Base`                                            | Name of the 1Password vault buchhalter-cli will query. Only items inside this vault are considered. Useful to limit the scope. If empty, buchhalter-cli will query all accessible items based on your login. See [Create and share vaults](https://support.1password.com/create-share-vaults/). |
 | `one_password_tag`               | String | `buchhalter-ai`                                   | Name of the 1Password item tag buchhalter-cli will query. Only items with this particular tag are considered. Useful to limit the scope. If empty, buchhalter-cli will query all items in your vault. See [Organize with favorites and tags](https://support.1password.com/favorites-tags/) |
 | `buchhalter_directory`           | String | `~/buchhalter/`                                   | Directory to store the invoices from suppliers into. |
@@ -67,7 +67,7 @@ The configuration file is in YAML format.
 An example looks like:
 
 ```yaml
-one_password_cli_command: "/opt/homebrew/bin/op"
+password_provider_cli_command: "/opt/homebrew/bin/op"
 one_password_base: "ACME Corp"
 one_password_tag: "invoice"
 buchhalter_always_send_metrics: True
