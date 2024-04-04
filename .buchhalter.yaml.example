@@ -1,4 +1,4 @@
 api_token: "sd8f8s7dfh87sdhf87hsdf87hsdf"
 password_provider_cli_command: "/usr/local/bin/op"
-one_password_base: "Base"
+password_provider_vault: "Base"
 one_password_tag: "buchhalter-ai"
