@@ -300,12 +300,15 @@ func stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	wg.Add(dl)
 	x := 0
 	for _, n := range nodes {
+		// TODO: We only download the latest two files for now. This should be configurable in the future.
 		if x >= 2 {
 			break
 		}
 		log.Println("Download WG add")
 		if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
 			chromedp.MouseClickNode(n),
+			chromedp.WaitVisible(n.FullXPath() + step.Value),
+			chromedp.Click(n.FullXPath() + step.Value),
 		}); err != nil {
 			return utils.StepResult{Status: "error", Message: err.Error()}
 		}
