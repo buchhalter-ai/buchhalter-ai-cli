@@ -15,6 +15,12 @@ import (
 	"buchhalter/lib/parser"
 )
 
+type BuchhalterAPIClient struct {
+	configDirectory string
+	repositoryUrl   string
+	metricsUrl      string
+}
+
 type Metric struct {
 	MetricType    string `json:"type,omitempty"`
 	Data          string `json:"data,omitempty"`
@@ -33,6 +39,62 @@ type RunDataProvider struct {
 	LastErrorMessage string  `json:"lastErrorMessage,omitempty"`
 	Duration         float64 `json:"duration,omitempty"`
 	NewFilesCount    int     `json:"newFilesCount,omitempty"`
+}
+
+func NewBuchhalterAPIClient(configDirectory, repositoryUrl, metricsUrl string) *BuchhalterAPIClient {
+	return &BuchhalterAPIClient{
+		configDirectory: configDirectory,
+		repositoryUrl:   repositoryUrl,
+	}
+}
+
+func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
+	updateExists, err := updateExists(c.repositoryUrl, currentChecksum)
+	if err != nil {
+		fmt.Printf("You're offline. Please connect to the internet for using buchhalter-cli")
+		os.Exit(1)
+	}
+
+	if updateExists {
+		client := &http.Client{
+			Timeout: 10 * time.Second,
+		}
+		ctx := context.Background()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.repositoryUrl, nil)
+		if err != nil {
+			if err != nil {
+				return err
+			}
+		}
+
+		// TODO Add CLI version to User-Agent, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/User-Agent
+		req.Header.Set("User-Agent", "buchhalter-cli")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			out, err := os.Create(filepath.Join(c.configDirectory, "oicdb.json"))
+			if err != nil {
+				return fmt.Errorf("couldn't create oicdb.json file: %w", err)
+			}
+			defer out.Close()
+
+			_, err = io.Copy(out, resp.Body)
+			if err != nil {
+				return fmt.Errorf("error copying response body to file: %w", err)
+			}
+
+			return nil
+		}
+		return fmt.Errorf("http request to %s failed with status code: %d", c.repositoryUrl, resp.StatusCode)
+	}
+
+	return nil
 }
 
 func updateExists(repositoryUrl, currentChecksum string) (bool, error) {
@@ -70,56 +132,7 @@ func updateExists(repositoryUrl, currentChecksum string) (bool, error) {
 	return false, fmt.Errorf("http request to %s failed with status code: %d", repositoryUrl, resp.StatusCode)
 }
 
-func UpdateIfAvailable(buchhalterConfigDirectory, repositoryUrl, currentChecksum string) error {
-	updateExists, err := updateExists(repositoryUrl, currentChecksum)
-	if err != nil {
-		fmt.Printf("You're offline. Please connect to the internet for using buchhalter-cli")
-		os.Exit(1)
-	}
-
-	if updateExists {
-		client := &http.Client{
-			Timeout: 10 * time.Second,
-		}
-		ctx := context.Background()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, repositoryUrl, nil)
-		if err != nil {
-			if err != nil {
-				return err
-			}
-		}
-
-		// TODO Add CLI version to User-Agent, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/User-Agent
-		req.Header.Set("User-Agent", "buchhalter-cli")
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusOK {
-			out, err := os.Create(filepath.Join(buchhalterConfigDirectory, "oicdb.json"))
-			if err != nil {
-				return fmt.Errorf("couldn't create oicdb.json file: %w", err)
-			}
-			defer out.Close()
-
-			_, err = io.Copy(out, resp.Body)
-			if err != nil {
-				return fmt.Errorf("error copying response body to file: %w", err)
-			}
-
-			return nil
-		}
-		return fmt.Errorf("http request to %s failed with status code: %d", repositoryUrl, resp.StatusCode)
-	}
-
-	return nil
-}
-
-func SendMetrics(metricsUrl string, runData RunData, cliVersion, chromeVersion, vaultVersion string) error {
+func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVersion, vaultVersion string) error {
 	rdx, err := json.Marshal(runData)
 	if err != nil {
 		return fmt.Errorf("error marshalling run data: %w", err)
@@ -141,7 +154,7 @@ func SendMetrics(metricsUrl string, runData RunData, cliVersion, chromeVersion, 
 
 	client := &http.Client{}
 	ctx := context.Background() // Consider using a meaningful context
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricsUrl, bytes.NewBuffer(mdj))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.metricsUrl, bytes.NewBuffer(mdj))
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
@@ -161,5 +174,5 @@ func SendMetrics(metricsUrl string, runData RunData, cliVersion, chromeVersion, 
 		return nil
 	}
 
-	return fmt.Errorf("http request to %s failed with status code: %d", metricsUrl, resp.StatusCode)
+	return fmt.Errorf("http request to %s failed with status code: %d", c.metricsUrl, resp.StatusCode)
 }

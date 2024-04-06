@@ -103,8 +103,12 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 	recipeParser := parser.NewRecipeParser(buchhalterConfigDirectory, buchhalterDirectory)
 
+	repositoryUrl := viper.GetString("buchhalter_repository_url")
+	metricsUrl := viper.GetString("buchhalter_metrics_url")
+	buchhalterAPIClient := repository.NewBuchhalterAPIClient(buchhalterConfigDirectory, repositoryUrl, metricsUrl)
+
 	// Run recipes
-	go runRecipes(p, provider, vaultProvider, documentArchive, recipeParser)
+	go runRecipes(p, provider, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
 
 	if _, err := p.Run(); err != nil {
 		logger.Error("Error running program", "error", err)
@@ -113,7 +117,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 }
 
-func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser) {
+func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
 	t := "Build archive index"
 	p.Send(resultStatusUpdate{title: t})
 
@@ -128,9 +132,9 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 		t = "Checking for repository updates"
 		p.Send(resultStatusUpdate{title: t})
 
-		repositoryUrl := viper.GetString("buchhalter_repository_url")
+		// TODO Where do we get this from?
 		currentChecksum := viper.GetString("buchhalter_repository_checksum")
-		err := repository.UpdateIfAvailable(buchhalterConfigDirectory, repositoryUrl, currentChecksum)
+		err := buchhalterAPIClient.UpdateIfAvailable(currentChecksum)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
@@ -197,8 +201,7 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 	}
 
 	if viper.GetBool("buchhalter_always_send_metrics") {
-		metricsUrl := viper.GetString("buchhalter_metrics_url")
-		err = repository.SendMetrics(metricsUrl, RunData, CliVersion, ChromeVersion, vaultProvider.Version)
+		err = buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultProvider.Version)
 		if err != nil {
 			// TODO Implement better error handling
 			fmt.Println(err)
@@ -252,9 +255,8 @@ func prepareRecipes(provider string, vaultProvider *vault.Provider1Password, rec
 	return r
 }
 
-func sendMetrics(a bool, vaultVersion string) {
-	metricsUrl := viper.GetString("buchhalter_metrics_url")
-	err := repository.SendMetrics(metricsUrl, RunData, CliVersion, ChromeVersion, vaultVersion)
+func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, vaultVersion string) {
+	err := buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultVersion)
 	if err != nil {
 		// TODO Implement better error handling
 		fmt.Println(err)
@@ -301,8 +303,9 @@ type model struct {
 	cursor        int
 	choice        string
 
-	vaultProvider *vault.Provider1Password
-	logger        *slog.Logger
+	vaultProvider       *vault.Provider1Password
+	buchhalterAPIClient *repository.BuchhalterAPIClient
+	logger              *slog.Logger
 }
 
 type quitMsg struct{}
@@ -395,7 +398,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = "sync"
 			switch m.choice {
 			case "Yes":
-				sendMetrics(false, m.vaultProvider.Version)
+				sendMetrics(m.buchhalterAPIClient, false, m.vaultProvider.Version)
 				mn := quit(m)
 				return mn, tea.Quit
 
@@ -404,7 +407,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return mn, tea.Quit
 
 			case "Always yes (don't ask again)":
-				sendMetrics(true, m.vaultProvider.Version)
+				sendMetrics(m.buchhalterAPIClient, true, m.vaultProvider.Version)
 				mn := quit(m)
 				return mn, tea.Quit
 			}
