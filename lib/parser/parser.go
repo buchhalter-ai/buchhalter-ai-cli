@@ -13,10 +13,18 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
+// TODO Remove global variable
 var OicdbVersion string
-var db Database
-var RecipeProviderByDomain = make(map[string]string)
-var RecipeByProvider = make(map[string]Recipe)
+
+type RecipeParser struct {
+	configDirectory  string
+	storageDirectory string
+
+	recipeProviderByDomain map[string]string
+	recipeByProvider       map[string]Recipe
+
+	database Database
+}
 
 type Database struct {
 	Name    string   `json:"name"`
@@ -61,9 +69,79 @@ type Step struct {
 	Execute                  string            `json:"execute,omitempty"`
 }
 
+// TODO is this type in use?
 type Urls []string
 
-func ValidateRecipes(buchhalterConfigDirectory string) (bool, error) {
+func NewRecipeParser(buchhalterConfigDirectory, buchhalterDirectory string) *RecipeParser {
+	return &RecipeParser{
+		configDirectory:  buchhalterConfigDirectory,
+		storageDirectory: buchhalterDirectory,
+
+		recipeProviderByDomain: make(map[string]string),
+		recipeByProvider:       make(map[string]Recipe),
+		database:               Database{},
+	}
+}
+
+func (p *RecipeParser) LoadRecipes(developmentMode bool) (bool, error) {
+	validationResult, err := validateRecipes(p.configDirectory)
+	if err != nil {
+		return validationResult, err
+	}
+
+	dbFile, err := os.Open(filepath.Join(p.configDirectory, "oicdb.json"))
+	if err != nil {
+		return false, err
+	}
+	defer dbFile.Close()
+	byteValue, _ := io.ReadAll(dbFile)
+
+	err = json.Unmarshal(byteValue, &p.database)
+	if err != nil {
+		return false, err
+	}
+	OicdbVersion = p.database.Version
+
+	/** Create local recipes directory if not exists */
+	if developmentMode {
+		OicdbVersion = OicdbVersion + "-dev"
+		err = p.loadLocalRecipes(p.storageDirectory)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	for i := 0; i < len(p.database.Recipes); i++ {
+		for n := 0; n < len(p.database.Recipes[i].Domains); n++ {
+			p.recipeProviderByDomain[p.database.Recipes[i].Domains[n]] = p.database.Recipes[i].Provider
+		}
+		p.recipeByProvider[p.database.Recipes[i].Provider] = p.database.Recipes[i]
+	}
+
+	return true, nil
+}
+
+func (p *RecipeParser) GetRecipeForItem(item vault.Item, urlsByItemId map[string][]string) *Recipe {
+	// Build regex pattern with all urls from the vault item
+	var pattern string
+	for domain := range p.recipeProviderByDomain {
+		pattern = "^(https?://)?" + regexp.QuoteMeta(domain)
+
+		// Try to match all item urls with a recipe url (e.g. digitalocean login url) */
+		for i := 0; i < len(urlsByItemId[item.ID]); i++ {
+			matched, _ := regexp.MatchString(pattern, urlsByItemId[item.ID][i])
+			if matched {
+				// Return matching recipe
+				recipe := p.recipeByProvider[p.recipeProviderByDomain[domain]]
+				return &recipe
+			}
+		}
+	}
+
+	return nil
+}
+
+func validateRecipes(buchhalterConfigDirectory string) (bool, error) {
 	schemaLoader := gojsonschema.NewReferenceLoader("file://schema/oicdb.schema.json")
 	documentLoader := gojsonschema.NewReferenceLoader("file://" + filepath.Join(buchhalterConfigDirectory, "oicdb.json"))
 
@@ -83,45 +161,7 @@ func ValidateRecipes(buchhalterConfigDirectory string) (bool, error) {
 	return false, nil
 }
 
-func LoadRecipes(buchhalterConfigDirectory, buchhalterDirectory string, devMode bool) (bool, error) {
-	validationResult, err := ValidateRecipes(buchhalterConfigDirectory)
-	if err != nil {
-		return validationResult, err
-	}
-
-	dbFile, err := os.Open(filepath.Join(buchhalterConfigDirectory, "oicdb.json"))
-	if err != nil {
-		return false, err
-	}
-	defer dbFile.Close()
-	byteValue, _ := io.ReadAll(dbFile)
-
-	err = json.Unmarshal(byteValue, &db)
-	if err != nil {
-		return false, err
-	}
-	OicdbVersion = db.Version
-
-	/** Create local recipes directory if not exists */
-	if devMode {
-		OicdbVersion = OicdbVersion + "-dev"
-		err = loadLocalRecipes(buchhalterDirectory)
-		if err != nil {
-			return false, err
-		}
-	}
-
-	for i := 0; i < len(db.Recipes); i++ {
-		for n := 0; n < len(db.Recipes[i].Domains); n++ {
-			RecipeProviderByDomain[db.Recipes[i].Domains[n]] = db.Recipes[i].Provider
-		}
-		RecipeByProvider[db.Recipes[i].Provider] = db.Recipes[i]
-	}
-
-	return true, nil
-}
-
-func loadLocalRecipes(buchhalterDirectory string) error {
+func (p *RecipeParser) loadLocalRecipes(buchhalterDirectory string) error {
 	sf := "_local/recipes"
 	recipesDir := filepath.Join(buchhalterDirectory, sf)
 	if _, err := os.Stat(recipesDir); os.IsNotExist(err) {
@@ -150,7 +190,7 @@ func loadLocalRecipes(buchhalterDirectory string) error {
 		if err != nil {
 			return err
 		}
-		n := getRecipeIndexByProvider(filenameWithoutExtension)
+		n := p.getRecipeIndexByProvider(filenameWithoutExtension)
 		if n >= 0 {
 			/** Replace recipe if exists */
 			var newRecipe Recipe
@@ -158,7 +198,7 @@ func loadLocalRecipes(buchhalterDirectory string) error {
 			if err != nil {
 				return err
 			}
-			db.Recipes[n] = newRecipe
+			p.database.Recipes[n] = newRecipe
 		} else {
 			/** Add recipe if not exists */
 			var recipe Recipe
@@ -166,39 +206,19 @@ func loadLocalRecipes(buchhalterDirectory string) error {
 			if err != nil {
 				return err
 			}
-			db.Recipes = append(db.Recipes, recipe)
+			p.database.Recipes = append(p.database.Recipes, recipe)
 		}
 	}
 
 	return nil
 }
 
-func getRecipeIndexByProvider(provider string) int {
-	for i := 0; i < len(db.Recipes); i++ {
-		if db.Recipes[i].Provider == provider {
+func (p *RecipeParser) getRecipeIndexByProvider(provider string) int {
+	for i := 0; i < len(p.database.Recipes); i++ {
+		if p.database.Recipes[i].Provider == provider {
 			return i
 		}
 	}
 
 	return -1
-}
-
-func GetRecipeForItem(item vault.Item, urlsByItemId map[string][]string) *Recipe {
-	// Build regex pattern with all urls from the vault item
-	var pattern string
-	for domain := range RecipeProviderByDomain {
-		pattern = "^(https?://)?" + regexp.QuoteMeta(domain)
-
-		// Try to match all item urls with a recipe url (e.g. digitalocean login url) */
-		for i := 0; i < len(urlsByItemId[item.ID]); i++ {
-			matched, _ := regexp.MatchString(pattern, urlsByItemId[item.ID][i])
-			if matched {
-				// Return matching recipe
-				recipe := RecipeByProvider[RecipeProviderByDomain[domain]]
-				return &recipe
-			}
-		}
-	}
-
-	return nil
 }
