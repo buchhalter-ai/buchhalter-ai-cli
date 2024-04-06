@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -50,45 +50,63 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		provider = cmdArgs[0]
 	}
 
+	// Init logging
+	buchhalterDirectory := viper.GetString("buchhalter_directory")
+	logSetting, err := cmd.Flags().GetBool("log")
+	if err != nil {
+		fmt.Printf("Error reading log flag: %s\n", err)
+		os.Exit(1)
+	}
+	logger, err := initializeLogger(logSetting, buchhalterDirectory)
+	if err != nil {
+		fmt.Printf("Error on initializing logging: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Init vault provider
 	vaultConfigBinary := viper.GetString("credential_provider_cli_command")
 	vaultConfigBase := viper.GetString("credential_provider_vault")
 	vaultConfigTag := viper.GetString("credential_provider_item_tag")
-
+	logger.Info("Initializing credential provider", "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
 	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, vaultConfigBinary, vaultConfigBase, vaultConfigTag)
 	if err != nil {
+		logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
 		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
 		os.Exit(1)
 	}
 
-	viewModel := initialModel(vaultProvider)
+	viewModel := initialModel(logger, vaultProvider)
 	p := tea.NewProgram(viewModel)
 
 	// Load vault items/try to connect to vault
 	vaultItems, err := vaultProvider.LoadVaultItems()
+
 	if err != nil {
+		logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
 		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
 		os.Exit(1)
 	}
-	if len(vaultItems) == 0 {
-		// TODO Add link with help article
-		fmt.Printf("No vault items found in vault '%s' with tag '%s'. Please check your 1password vault items.\n", vaultConfigBase, vaultConfigTag)
-		os.Exit(1)
-	}
-	log.Printf("Found %d vault items in vault '%s' with tag '%s'.\n", len(vaultItems), vaultConfigBase, vaultConfigTag)
 
 	// Check if vault items are available
 	if len(vaultItems) == 0 {
-		fmt.Println("No vault items found. Please check your 1password vault.")
+		// TODO Add link with help article
+		logger.Error("No credential items loaded from vault", "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
+		fmt.Printf("No credential items found in vault '%s' with tag '%s'. Please check your 1password vault items.\n", vaultConfigBase, vaultConfigTag)
 		os.Exit(1)
 	}
+
+	logger.Info("Credential items loaded from vault", "items", vaultItems, "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
 
 	// Run recipes
 	go runRecipes(p, provider, vaultProvider)
 
 	if _, err := p.Run(); err != nil {
-		fmt.Println("Error running program:", err)
+		logger.Error("Error running program", "error", err)
+		fmt.Printf("Error running program: %s\n", err)
 		os.Exit(1)
 	}
+
+	logger.Info("Shutting down")
 }
 
 func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password) {
@@ -280,6 +298,7 @@ type model struct {
 	choice        string
 
 	vaultProvider *vault.Provider1Password
+	logger        *slog.Logger
 }
 
 type quitMsg struct{}
@@ -323,7 +342,7 @@ type ResultProgressUpdate struct {
 type tickMsg time.Time
 
 // initialModel returns the model for the bubbletea application.
-func initialModel(vaultProvider *vault.Provider1Password) model {
+func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password) model {
 	const numLastResults = 5
 
 	s := spinner.New()
@@ -339,7 +358,9 @@ func initialModel(vaultProvider *vault.Provider1Password) model {
 		spinner:       s,
 		results:       make([]resultMsg, numLastResults),
 		hasError:      false,
+
 		vaultProvider: vaultProvider,
+		logger:        logger,
 	}
 
 	return m

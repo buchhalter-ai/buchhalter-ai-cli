@@ -7,7 +7,7 @@ import (
 	"buchhalter/lib/utils"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -58,7 +58,7 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
 		os.Exit(1)
 	}
 }
@@ -73,12 +73,14 @@ func init() {
 	rootCmd.PersistentFlags().BoolP("dev", "d", false, "development mode (e.g. without OICDB recipe updates and sending metrics)")
 	err := viper.BindPFlag("dev", rootCmd.PersistentFlags().Lookup("dev"))
 	if err != nil {
-		log.Fatalf("Failed to bind 'dev' flag: %v", err)
+		fmt.Printf("Failed to bind 'dev' flag: %v\n", err)
+		os.Exit(1)
 	}
 
 	err = viper.BindPFlag("log", rootCmd.PersistentFlags().Lookup("log"))
 	if err != nil {
-		log.Fatalf("Failed to bind 'log' flag: %v", err)
+		fmt.Printf("Failed to bind 'log' flag: %v\n", err)
+		os.Exit(1)
 	}
 }
 
@@ -130,21 +132,22 @@ func initConfig() {
 		fmt.Println("Error creating main directory:", err)
 		os.Exit(1)
 	}
+}
 
-	// Log settings
-	logSetting, _ := rootCmd.Flags().GetBool("log")
+func initializeLogger(logSetting bool, buchhalterDir string) (*slog.Logger, error) {
+	var logger *slog.Logger
+
 	if logSetting {
 		fileName := filepath.Join(buchhalterDir, "buchhalter-cli.log")
-		logFile, err := os.OpenFile(fileName, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
+		outputWriter, err := os.OpenFile(fileName, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			fmt.Printf("Can't open %s for logging: %+v\n", fileName, err)
-			os.Exit(1)
+			return nil, fmt.Errorf("can't open %s for logging: %+v", fileName, err)
 		}
-		defer logFile.Close()
-		log.SetOutput(logFile)
-		log.SetFlags(log.LstdFlags)
-
+		// defer outputWriter.Close()
+		logger = slog.New(slog.NewTextHandler(outputWriter, nil))
 	} else {
-		log.SetOutput(io.Discard)
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
+
+	return logger, nil
 }
