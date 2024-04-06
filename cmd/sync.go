@@ -186,10 +186,13 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 			// TODO Should we quit it here or inside RunRecipe?
 			browserDriver.Quit()
 		case "client":
-			recipeResult = client.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
+			browserDriver := client.NewClientAuthBrowserDriver(recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
+			recipeResult = browserDriver.RunRecipe(p, tsc, scs, bcs, r[i].recipe)
 			if ChromeVersion == "" {
-				ChromeVersion = client.ChromeVersion
+				ChromeVersion = browserDriver.ChromeVersion
 			}
+			// TODO Should we quit it here or inside RunRecipe?
+			browserDriver.Quit()
 		}
 		rdx := repository.RunDataProvider{
 			Provider:         r[i].recipe.Provider,
@@ -585,6 +588,7 @@ func quit(m model) model {
 		m.details = "HAVE A NICE DAY! :)"
 	}
 
+	// TODO Double check where we need to quit running browser sessions
 	// TODO Wait group for browser and client
 	/*
 		go func() {
@@ -595,13 +599,15 @@ func quit(m model) model {
 			}
 		}()
 	*/
-	go func() {
-		err := client.Quit()
-		if err != nil {
-			// TODO implement better error handling
-			fmt.Println(err)
-		}
-	}()
+	/*
+		go func() {
+			err := client.Quit()
+			if err != nil {
+				// TODO implement better error handling
+				fmt.Println(err)
+			}
+		}()
+	*/
 
 	return m
 }
