@@ -20,7 +20,11 @@
       }
     }
   },
-  "required": ["name", "version", "recipes"],
+  "required": [
+    "name",
+    "version",
+    "recipes"
+  ],
   "definitions": {
     "recipe": {
       "type": "object",
@@ -50,15 +54,32 @@
           "minItems": 1,
           "items": {
             "allOf": [
-              {"$ref": "#/definitions/step"},
-              {"$ref": "#/definitions/stepOpenUrl"},
-              {"$ref": "#/definitions/stepTypeWithKeyboard"},
-              {"$ref": "#/definitions/stepEvaluateJsCode"}
+              {
+                "$ref": "#/definitions/step"
+              },
+              {
+                "$ref": "#/definitions/stepOpenUrl"
+              },
+              {
+                "$ref": "#/definitions/stepTypeWithKeyboard"
+              },
+              {
+                "$ref": "#/definitions/stepEvaluateJsCode"
+              },
+              {
+                "$ref": "#/definitions/stepOauth2Setup"
+              }
             ]
           }
         }
       },
-      "required": ["provider", "domains", "version", "type", "steps"]
+      "required": [
+        "provider",
+        "domains",
+        "version",
+        "type",
+        "steps"
+      ]
     },
     "step": {
       "type": "object",
@@ -66,7 +87,23 @@
       "properties": {
         "action": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "enum": [
+            "open",
+            "click",
+            "waitFor",
+            "sleep",
+            "removeElement",
+            "type",
+            "transform",
+            "move",
+            "evaluate",
+            "downloadAll",
+            "oauth2-setup",
+            "oauth2-check-tokens",
+            "oauth2-authenticate",
+            "oauth2-post-and-get-items"
+          ]
         },
         "when": {
           "$refs": "#/definitions/stepCondition"
@@ -101,7 +138,8 @@
       },
       "then": {
         "required": [
-          "action", "url"
+          "action",
+          "url"
         ]
       }
     },
@@ -165,7 +203,8 @@
       },
       "then": {
         "required": [
-          "action", "execute"
+          "action",
+          "execute"
         ]
       }
     },
@@ -177,7 +216,74 @@
           "format": "url"
         }
       },
-      "required": ["url"]
+      "required": [
+        "url"
+      ]
+    },
+    "stepOauth2Setup": {
+      "type": "object",
+      "description": "Setup OAuth2 authentication",
+      "properties": {
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "oauth2": {
+          "type": "object",
+          "required": [
+            "authUrl",
+            "tokenUrl",
+            "redirectUrl",
+            "clientId",
+            "scope",
+            "pkceMethod",
+            "pkceVerifierLength"
+          ],
+          "properties": {
+            "authUrl": {
+              "type": "string",
+              "format": "uri"
+            },
+            "tokenUrl": {
+              "type": "string",
+              "format": "uri"
+            },
+            "redirectUrl": {
+              "type": "string",
+              "format": "uri"
+            },
+            "clientId": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string"
+            },
+            "pkceMethod": {
+              "type": "string",
+              "minLength": 1,
+              "enum": [
+                "S256"
+              ]
+            },
+            "pkceVerifierLength": {
+              "type": "integer",
+              "minLength": 1
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "action": {
+            "const": "oauth2-setup"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "oauth2"
+        ]
+      }
     }
   },
   "additionalProperties": false
