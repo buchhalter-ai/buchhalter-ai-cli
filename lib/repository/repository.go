@@ -17,6 +17,7 @@ type BuchhalterAPIClient struct {
 	configDirectory string
 	repositoryUrl   string
 	metricsUrl      string
+	userAgent       string
 }
 
 type Metric struct {
@@ -39,15 +40,17 @@ type RunDataProvider struct {
 	NewFilesCount    int     `json:"newFilesCount,omitempty"`
 }
 
-func NewBuchhalterAPIClient(configDirectory, repositoryUrl, metricsUrl string) *BuchhalterAPIClient {
+func NewBuchhalterAPIClient(configDirectory, repositoryUrl, metricsUrl, cliVersion string) *BuchhalterAPIClient {
 	return &BuchhalterAPIClient{
 		configDirectory: configDirectory,
 		repositoryUrl:   repositoryUrl,
+		metricsUrl:      metricsUrl,
+		userAgent:       fmt.Sprintf("buchhalter-cli/%s", cliVersion),
 	}
 }
 
 func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
-	updateExists, err := updateExists(c.repositoryUrl, currentChecksum)
+	updateExists, err := c.updateExists(c.repositoryUrl, currentChecksum)
 	if err != nil {
 		fmt.Printf("You're offline. Please connect to the internet for using buchhalter-cli")
 		os.Exit(1)
@@ -65,8 +68,7 @@ func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
 			}
 		}
 
-		// TODO Add CLI version to User-Agent, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/User-Agent
-		req.Header.Set("User-Agent", "buchhalter-cli")
+		req.Header.Set("User-Agent", c.userAgent)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
 		resp, err := client.Do(req)
@@ -95,7 +97,7 @@ func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
 	return nil
 }
 
-func updateExists(repositoryUrl, currentChecksum string) (bool, error) {
+func (c *BuchhalterAPIClient) updateExists(repositoryUrl, currentChecksum string) (bool, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -105,8 +107,7 @@ func updateExists(repositoryUrl, currentChecksum string) (bool, error) {
 		return false, err
 	}
 
-	// TODO Add CLI version to User-Agent, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/User-Agent
-	req.Header.Set("User-Agent", "buchhalter-cli")
+	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
@@ -157,8 +158,7 @@ func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVer
 		return fmt.Errorf("error creating request: %w", err)
 	}
 
-	// TODO Add CLI version to User-Agent, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/User-Agent
-	req.Header.Set("User-Agent", "buchhalter-cli")
+	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
