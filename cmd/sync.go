@@ -198,28 +198,17 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		logger.Info("Downloading invoices ...", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type)
 		switch r[i].recipe.Type {
 		case "browser":
-			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDirectory, documentArchive)
+			browserDriver := browser.NewBrowserDriver(recipeCredentials, buchhalterDirectory, documentArchive)
 			recipeResult = browserDriver.RunRecipe(p, tsc, scs, bcs, r[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = browserDriver.ChromeVersion
 			}
 			// TODO Should we quit it here or inside RunRecipe?
-			err = browserDriver.Quit()
-			if err != nil {
-				// TODO Implement better error handling
-				fmt.Println(err)
-			}
+			browserDriver.Quit()
 		case "client":
-			browserDriver := client.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
-			recipeResult = browserDriver.RunRecipe(p, tsc, scs, bcs, r[i].recipe)
+			recipeResult = client.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
 			if ChromeVersion == "" {
-				ChromeVersion = browserDriver.ChromeVersion
-			}
-			// TODO Should we quit it here or inside RunRecipe?
-			err = browserDriver.Quit()
-			if err != nil {
-				// TODO Implement better error handling
-				fmt.Println(err)
+				ChromeVersion = client.ChromeVersion
 			}
 		}
 		rdx := repository.RunDataProvider{
@@ -633,7 +622,6 @@ func quit(m model) model {
 		m.details = "HAVE A NICE DAY! :)"
 	}
 
-	// TODO Double check where we need to quit running browser sessions
 	// TODO Wait group for browser and client
 	/*
 		go func() {
@@ -644,15 +632,13 @@ func quit(m model) model {
 			}
 		}()
 	*/
-	/*
-		go func() {
-			err := client.Quit()
-			if err != nil {
-				// TODO implement better error handling
-				fmt.Println(err)
-			}
-		}()
-	*/
+	go func() {
+		err := client.Quit()
+		if err != nil {
+			// TODO implement better error handling
+			fmt.Println(err)
+		}
+	}()
 
 	return m
 }
