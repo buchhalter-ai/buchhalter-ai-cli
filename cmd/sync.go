@@ -62,6 +62,8 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		fmt.Printf("Error on initializing logging: %s\n", err)
 		os.Exit(1)
 	}
+	logger.Info("Starting")
+	defer logger.Info("Shutting down")
 
 	// Init document archive
 	documentArchive := archive.NewDocumentArchive(buchhalterDirectory)
@@ -108,8 +110,6 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		fmt.Printf("Error running program: %s\n", err)
 		os.Exit(1)
 	}
-
-	logger.Info("Shutting down")
 }
 
 func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive) {
