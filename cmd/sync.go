@@ -80,7 +80,14 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		os.Exit(1)
 	}
 
-	viewModel := initialModel(logger, vaultProvider)
+	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
+	recipeParser := parser.NewRecipeParser(buchhalterConfigDirectory, buchhalterDirectory)
+
+	repositoryUrl := viper.GetString("buchhalter_repository_url")
+	metricsUrl := viper.GetString("buchhalter_metrics_url")
+	buchhalterAPIClient := repository.NewBuchhalterAPIClient(buchhalterConfigDirectory, repositoryUrl, metricsUrl)
+
+	viewModel := initialModel(logger, vaultProvider, buchhalterAPIClient, recipeParser)
 	p := tea.NewProgram(viewModel)
 
 	// Load vault items/try to connect to vault
@@ -99,13 +106,6 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		os.Exit(1)
 	}
 	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
-
-	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
-	recipeParser := parser.NewRecipeParser(buchhalterConfigDirectory, buchhalterDirectory)
-
-	repositoryUrl := viper.GetString("buchhalter_repository_url")
-	metricsUrl := viper.GetString("buchhalter_metrics_url")
-	buchhalterAPIClient := repository.NewBuchhalterAPIClient(buchhalterConfigDirectory, repositoryUrl, metricsUrl)
 
 	// Run recipes
 	go runRecipes(p, provider, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
@@ -201,7 +201,7 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 	}
 
 	if viper.GetBool("buchhalter_always_send_metrics") {
-		err = buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultProvider.Version)
+		err = buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
 		if err != nil {
 			// TODO Implement better error handling
 			fmt.Println(err)
@@ -255,8 +255,8 @@ func prepareRecipes(provider string, vaultProvider *vault.Provider1Password, rec
 	return r
 }
 
-func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, vaultVersion string) {
-	err := buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultVersion)
+func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, vaultVersion, oicdbVersion string) {
+	err := buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultVersion, oicdbVersion)
 	if err != nil {
 		// TODO Implement better error handling
 		fmt.Println(err)
@@ -305,6 +305,7 @@ type model struct {
 
 	vaultProvider       *vault.Provider1Password
 	buchhalterAPIClient *repository.BuchhalterAPIClient
+	recipeParser        *parser.RecipeParser
 	logger              *slog.Logger
 }
 
@@ -349,7 +350,7 @@ type ResultProgressUpdate struct {
 type tickMsg time.Time
 
 // initialModel returns the model for the bubbletea application.
-func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password) model {
+func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password, buchhalterAPIClient *repository.BuchhalterAPIClient, recipeParser *parser.RecipeParser) model {
 	const numLastResults = 5
 
 	s := spinner.New()
@@ -366,8 +367,10 @@ func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password) m
 		results:       make([]resultMsg, numLastResults),
 		hasError:      false,
 
-		vaultProvider: vaultProvider,
-		logger:        logger,
+		vaultProvider:       vaultProvider,
+		buchhalterAPIClient: buchhalterAPIClient,
+		recipeParser:        recipeParser,
+		logger:              logger,
 	}
 
 	return m
@@ -398,7 +401,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = "sync"
 			switch m.choice {
 			case "Yes":
-				sendMetrics(m.buchhalterAPIClient, false, m.vaultProvider.Version)
+				sendMetrics(m.buchhalterAPIClient, false, m.vaultProvider.Version, m.recipeParser.OicdbVersion)
 				mn := quit(m)
 				return mn, tea.Quit
 
@@ -407,7 +410,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return mn, tea.Quit
 
 			case "Always yes (don't ask again)":
-				sendMetrics(m.buchhalterAPIClient, true, m.vaultProvider.Version)
+				sendMetrics(m.buchhalterAPIClient, true, m.vaultProvider.Version, m.recipeParser.OicdbVersion)
 				mn := quit(m)
 				return mn, tea.Quit
 			}
@@ -504,7 +507,7 @@ func (m model) View() string {
 		textStyle("Automatically sync all your incoming invoices from your suppliers. "),
 		textStyle("More information at: "),
 		textStyleBold("https://buchhalter.ai"),
-		textStyleGrayBold("Using OICDB "+parser.OicdbVersion+" and CLI "+CliVersion),
+		textStyleGrayBold(fmt.Sprintf("Using OICDB %s and CLI %s", m.recipeParser.OicdbVersion, CliVersion)),
 	) + "\n"
 
 	if !m.hasError {

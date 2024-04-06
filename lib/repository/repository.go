@@ -11,8 +11,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
-
-	"buchhalter/lib/parser"
 )
 
 type BuchhalterAPIClient struct {
@@ -132,7 +130,7 @@ func updateExists(repositoryUrl, currentChecksum string) (bool, error) {
 	return false, fmt.Errorf("http request to %s failed with status code: %d", repositoryUrl, resp.StatusCode)
 }
 
-func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVersion, vaultVersion string) error {
+func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVersion, vaultVersion, oicdbVersion string) error {
 	rdx, err := json.Marshal(runData)
 	if err != nil {
 		return fmt.Errorf("error marshalling run data: %w", err)
@@ -142,7 +140,7 @@ func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVer
 		MetricType:    "runMetrics",
 		Data:          string(rdx),
 		CliVersion:    cliVersion,
-		OicdbVersion:  parser.OicdbVersion,
+		OicdbVersion:  oicdbVersion,
 		VaultVersion:  vaultVersion,
 		ChromeVersion: chromeVersion,
 		OS:            runtime.GOOS,

@@ -13,9 +13,6 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
-// TODO Remove global variable
-var OicdbVersion string
-
 type RecipeParser struct {
 	configDirectory  string
 	storageDirectory string
@@ -23,7 +20,8 @@ type RecipeParser struct {
 	recipeProviderByDomain map[string]string
 	recipeByProvider       map[string]Recipe
 
-	database Database
+	database     Database
+	OicdbVersion string
 }
 
 type Database struct {
@@ -100,11 +98,11 @@ func (p *RecipeParser) LoadRecipes(developmentMode bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	OicdbVersion = p.database.Version
+	p.OicdbVersion = p.database.Version
 
 	/** Create local recipes directory if not exists */
 	if developmentMode {
-		OicdbVersion = OicdbVersion + "-dev"
+		p.OicdbVersion = p.OicdbVersion + "-dev"
 		err = p.loadLocalRecipes(p.storageDirectory)
 		if err != nil {
 			return false, err
