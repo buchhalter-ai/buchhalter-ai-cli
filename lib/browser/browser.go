@@ -38,7 +38,7 @@ var (
 	newFilesCount      = 0
 )
 
-func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials, buchhalterDirectory string) utils.RecipeResult {
+func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials, buchhalterDirectory string, documentArchive *archive.DocumentArchive) utils.RecipeResult {
 	// New creates a new context for use with chromedp. With this context
 	// you can use chromedp as you normally would.
 	ctx, cancel, err := cu.New(cu.NewConfig(
@@ -122,7 +122,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 			case "transform":
 				sr <- stepTransform(step)
 			case "move":
-				sr <- stepMove(step)
+				sr <- stepMove(step, documentArchive)
 			case "runScript":
 				sr <- stepRunScript(ctx, step)
 			case "runScriptDownloadUrls":
@@ -341,7 +341,7 @@ func stepTransform(step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
-func stepMove(step parser.Step) utils.StepResult {
+func stepMove(step parser.Step, documentArchive *archive.DocumentArchive) utils.StepResult {
 	newFilesCount = 0
 	err := filepath.WalkDir(downloadsDirectory, func(s string, d fs.DirEntry, e error) error {
 		if e != nil {
@@ -354,7 +354,7 @@ func stepMove(step parser.Step) utils.StepResult {
 		if match {
 			srcFile := filepath.Join(downloadsDirectory, d.Name())
 			// Check if file already exists
-			if !archive.FileExists(srcFile) {
+			if !documentArchive.FileExists(srcFile) {
 				newFilesCount++
 				_, err := utils.CopyFile(srcFile, filepath.Join(documentsDirectory, d.Name()))
 				if err != nil {

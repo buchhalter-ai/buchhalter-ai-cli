@@ -9,14 +9,24 @@ import (
 	"path/filepath"
 )
 
-// TODO Check if this can be replaced by a hashmap for better performance.
+type DocumentArchive struct {
+	storageDirectory string
+	fileHashes       []string
+}
 
-var fileHashes []string
+func NewDocumentArchive(archiveDirectory string) *DocumentArchive {
+	return &DocumentArchive{
+		storageDirectory: archiveDirectory,
 
-func BuildArchiveIndex(archiveDirectory string) error {
+		// TODO Check if this can be replaced by a hashmap for better performance.
+		fileHashes: []string{},
+	}
+}
+
+func (a *DocumentArchive) BuildArchiveIndex() error {
 	// Iterate over all files in the archive directory and build an index with all existing file hashes.
 	// This index will be used to detect if a downloaded invoice/file is new or already exists.
-	err := filepath.Walk(archiveDirectory, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(a.storageDirectory, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -25,7 +35,7 @@ func BuildArchiveIndex(archiveDirectory string) error {
 			if err != nil {
 				return fmt.Errorf("error computing hash for %s: %w", path, err)
 			}
-			fileHashes = append(fileHashes, hash)
+			a.fileHashes = append(a.fileHashes, hash)
 		}
 		return nil
 	})
@@ -34,6 +44,11 @@ func BuildArchiveIndex(archiveDirectory string) error {
 	}
 
 	return nil
+}
+
+func (a *DocumentArchive) FileExists(filePath string) bool {
+	hash, _ := computeHash(filePath)
+	return a.fileHashExists(hash)
 }
 
 func computeHash(filePath string) (string, error) {
@@ -66,13 +81,8 @@ func computeHash(filePath string) (string, error) {
 	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
-func FileExists(filePath string) bool {
-	hash, _ := computeHash(filePath)
-	return fileHashExists(hash)
-}
-
-func fileHashExists(hash string) bool {
-	for _, fh := range fileHashes {
+func (a *DocumentArchive) fileHashExists(hash string) bool {
+	for _, fh := range a.fileHashes {
 		if fh == hash && hash != "" {
 			return true
 		}

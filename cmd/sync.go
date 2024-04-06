@@ -63,6 +63,9 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		os.Exit(1)
 	}
 
+	// Init document archive
+	documentArchive := archive.NewDocumentArchive(buchhalterDirectory)
+
 	// Init vault provider
 	vaultConfigBinary := viper.GetString("credential_provider_cli_command")
 	vaultConfigBase := viper.GetString("credential_provider_vault")
@@ -98,7 +101,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
 
 	// Run recipes
-	go runRecipes(p, provider, vaultProvider)
+	go runRecipes(p, provider, vaultProvider, documentArchive)
 
 	if _, err := p.Run(); err != nil {
 		logger.Error("Error running program", "error", err)
@@ -109,11 +112,11 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	logger.Info("Shutting down")
 }
 
-func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password) {
+func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive) {
 	t := "Build archive index"
 	p.Send(resultStatusUpdate{title: t})
-	buchhalterDirectory := viper.GetString("buchhalter_directory")
-	err := archive.BuildArchiveIndex(buchhalterDirectory)
+
+	err := documentArchive.BuildArchiveIndex()
 	if err != nil {
 		// TODO Implement better error handling
 		fmt.Println(err)
@@ -145,6 +148,8 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 	p.Send(resultStatusUpdate{title: t})
 	p.Send(ResultProgressUpdate{Percent: 0.001})
 
+	buchhalterDirectory := viper.GetString("buchhalter_directory")
+
 	tsc := 0 //total steps count
 	scs := 0 //count steps current recipe
 	bcs := 0 //base count steps
@@ -167,12 +172,12 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 
 		switch r[i].recipe.Type {
 		case "browser":
-			recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterDirectory)
+			recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterDirectory, documentArchive)
 			if ChromeVersion == "" {
 				ChromeVersion = browser.ChromeVersion
 			}
 		case "client":
-			recipeResult = client.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory)
+			recipeResult = client.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
 			if ChromeVersion == "" {
 				ChromeVersion = client.ChromeVersion
 			}

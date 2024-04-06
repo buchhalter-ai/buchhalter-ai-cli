@@ -51,7 +51,7 @@ type HiddenInputFields struct {
 	Fields map[string]string
 }
 
-func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials, buchhalterConfigDirectory, buchhalterDirectory string) utils.RecipeResult {
+func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials, buchhalterConfigDirectory, buchhalterDirectory string, documentArchive *archive.DocumentArchive) utils.RecipeResult {
 	// Init directories
 	var err error
 	downloadsDirectory, documentsDirectory, err = utils.InitProviderDirectories(buchhalterDirectory, recipe.Provider)
@@ -100,7 +100,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 			case "oauth2-authenticate":
 				sr <- stepOauth2Authenticate(ctx, recipe, step, credentials, buchhalterConfigDirectory)
 			case "oauth2-post-and-get-items":
-				sr <- stepOauth2PostAndGetItems(ctx, step)
+				sr <- stepOauth2PostAndGetItems(ctx, step, documentArchive)
 			}
 		}()
 
@@ -261,7 +261,7 @@ func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step par
 	return utils.StepResult{Status: "success", Message: "Successfully retrieved OAuth2 tokens."}
 }
 
-func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step) utils.StepResult {
+func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step, documentArchive *archive.DocumentArchive) utils.StepResult {
 	payload := []byte(step.Body)
 	req, err := http.NewRequestWithContext(ctx, "POST", step.URL, bytes.NewBuffer(payload))
 	if err != nil {
@@ -331,7 +331,7 @@ func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step) utils.Step
 			if !downloadSuccessful {
 				return utils.StepResult{Status: "error", Message: "Error while downloading invoices"}
 			}
-			if !archive.FileExists(f) {
+			if !documentArchive.FileExists(f) {
 				newFilesCount++
 				_, err := utils.CopyFile(f, filepath.Join(documentsDirectory, filename))
 				if err != nil {
