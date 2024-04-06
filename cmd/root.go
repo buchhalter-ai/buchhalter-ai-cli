@@ -89,9 +89,9 @@ func initConfig() {
 	buchhalterDir := filepath.Join(homeDir, "buchhalter")
 
 	// Set default values for viper config
-	viper.SetDefault("one_password_cli_command", "")
-	viper.SetDefault("one_password_base", "Base")
-	viper.SetDefault("one_password_tag", "buchhalter-ai")
+	viper.SetDefault("credential_provider_cli_command", "")
+	viper.SetDefault("credential_provider_vault", "Base")
+	viper.SetDefault("credential_provider_item_tag", "buchhalter-ai")
 	viper.SetDefault("buchhalter_directory", buchhalterDir)
 	viper.SetDefault("buchhalter_config_directory", buchhalterConfigDir)
 	viper.SetDefault("buchhalter_repository_url", "https://app.buchhalter.ai/api/cli/repository")

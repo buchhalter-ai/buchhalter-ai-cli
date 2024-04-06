@@ -50,9 +50,9 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		provider = cmdArgs[0]
 	}
 
-	vaultConfigBinary := viper.GetString("one_password_cli_command")
-	vaultConfigBase := viper.GetString("one_password_base")
-	vaultConfigTag := viper.GetString("one_password_tag")
+	vaultConfigBinary := viper.GetString("credential_provider_cli_command")
+	vaultConfigBase := viper.GetString("credential_provider_vault")
+	vaultConfigTag := viper.GetString("credential_provider_item_tag")
 
 	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, vaultConfigBinary, vaultConfigBase, vaultConfigTag)
 	if err != nil {
