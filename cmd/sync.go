@@ -178,10 +178,13 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 
 		switch r[i].recipe.Type {
 		case "browser":
-			recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterDirectory, documentArchive)
+			browserDriver := browser.NewBrowserDriver(recipeCredentials, buchhalterDirectory, documentArchive)
+			recipeResult = browserDriver.RunRecipe(p, tsc, scs, bcs, r[i].recipe)
 			if ChromeVersion == "" {
-				ChromeVersion = browser.ChromeVersion
+				ChromeVersion = browserDriver.ChromeVersion
 			}
+			// TODO Should we quit it here or inside RunRecipe?
+			browserDriver.Quit()
 		case "client":
 			recipeResult = client.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
 			if ChromeVersion == "" {
@@ -583,13 +586,15 @@ func quit(m model) model {
 	}
 
 	// TODO Wait group for browser and client
-	go func() {
-		err := browser.Quit()
-		if err != nil {
-			// TODO implement better error handling
-			fmt.Println(err)
-		}
-	}()
+	/*
+		go func() {
+			err := browser.Quit()
+			if err != nil {
+				// TODO implement better error handling
+				fmt.Println(err)
+			}
+		}()
+	*/
 	go func() {
 		err := client.Quit()
 		if err != nil {

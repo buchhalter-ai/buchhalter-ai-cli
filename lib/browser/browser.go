@@ -29,20 +29,44 @@ import (
 )
 
 var (
-	downloadsDirectory string
-	documentsDirectory string
-	browserCtx         context.Context
-	recipeTimeout      = 60 * time.Second
-	textStyleBold      = lipgloss.NewStyle().Bold(true).Render
-	ChromeVersion      string
-	newFilesCount      = 0
+	textStyleBold = lipgloss.NewStyle().Bold(true).Render
 )
 
-func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials, buchhalterDirectory string, documentArchive *archive.DocumentArchive) utils.RecipeResult {
+type BrowserDriver struct {
+	credentials     *vault.Credentials
+	documentArchive *archive.DocumentArchive
+
+	buchhalterDirectory string
+
+	ChromeVersion string
+
+	// TODO Check if those are needed
+	downloadsDirectory string
+	documentsDirectory string
+
+	browserCtx    context.Context
+	recipeTimeout time.Duration
+	newFilesCount int
+}
+
+func NewBrowserDriver(credentials *vault.Credentials, buchhalterDirectory string, documentArchive *archive.DocumentArchive) *BrowserDriver {
+	return &BrowserDriver{
+		credentials:     credentials,
+		documentArchive: documentArchive,
+
+		buchhalterDirectory: buchhalterDirectory,
+
+		browserCtx:    context.Background(),
+		recipeTimeout: 60 * time.Second,
+		newFilesCount: 0,
+	}
+}
+
+func (b *BrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe) utils.RecipeResult {
 	// New creates a new context for use with chromedp. With this context
 	// you can use chromedp as you normally would.
 	ctx, cancel, err := cu.New(cu.NewConfig(
-		cu.WithContext(browserCtx),
+		cu.WithContext(b.browserCtx),
 	))
 	if err != nil {
 		// TODO Implement error handling
@@ -55,33 +79,33 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 	defer cancel()
 
 	// create download directories
-	downloadsDirectory, documentsDirectory, err = utils.InitProviderDirectories(buchhalterDirectory, recipe.Provider)
+	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDirectory, recipe.Provider)
 	if err != nil {
 		// TODO Implement error handling
 		fmt.Println(err)
 	}
 
 	// get chrome version for metrics
-	if ChromeVersion == "" {
+	if b.ChromeVersion == "" {
 		err := chromedp.Run(ctx, chromedp.Tasks{
 			chromedp.Navigate("chrome://version"),
-			chromedp.Text(`#version`, &ChromeVersion, chromedp.NodeVisible),
+			chromedp.Text(`#version`, &b.ChromeVersion, chromedp.NodeVisible),
 		})
 		if err != nil {
 			// TODO Implement error handling
 			log.Fatal(err)
 		}
-		ChromeVersion = strings.TrimSpace(ChromeVersion)
+		b.ChromeVersion = strings.TrimSpace(b.ChromeVersion)
 	}
 
 	err = chromedp.Run(ctx, chromedp.Tasks{
 		browser.
 			SetDownloadBehavior(browser.SetDownloadBehaviorBehaviorAllow).
-			WithDownloadPath(downloadsDirectory).
+			WithDownloadPath(b.downloadsDirectory).
 			WithEventsEnabled(true),
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			// TODO Implement error handling
-			_ = waitForLoadEvent(ctx)
+			_ = b.waitForLoadEvent(ctx)
 			return nil
 		}),
 	})
@@ -92,9 +116,9 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 	}
 
 	// Disable downloading images for performance reasons
-	chromedp.ListenTarget(ctx, DisableImages(ctx))
+	chromedp.ListenTarget(ctx, b.disableImages(ctx))
 
-	_ = enableLifeCycleEvents()
+	_ = b.enableLifeCycleEvents()
 
 	var cs float64
 	n := 1
@@ -106,37 +130,37 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 		go func() {
 			switch action := step.Action; action {
 			case "open":
-				sr <- stepOpen(ctx, step)
+				sr <- b.stepOpen(ctx, step)
 			case "removeElement":
-				sr <- stepRemoveElement(ctx, step)
+				sr <- b.stepRemoveElement(ctx, step)
 			case "click":
-				sr <- stepClick(ctx, step)
+				sr <- b.stepClick(ctx, step)
 			case "type":
-				sr <- stepType(ctx, step, credentials)
+				sr <- b.stepType(ctx, step, b.credentials)
 			case "sleep":
-				sr <- stepSleep(ctx, step)
+				sr <- b.stepSleep(ctx, step)
 			case "waitFor":
-				sr <- stepWaitFor(ctx, step)
+				sr <- b.stepWaitFor(ctx, step)
 			case "downloadAll":
-				sr <- stepDownloadAll(ctx, step)
+				sr <- b.stepDownloadAll(ctx, step)
 			case "transform":
-				sr <- stepTransform(step)
+				sr <- b.stepTransform(step)
 			case "move":
-				sr <- stepMove(step, documentArchive)
+				sr <- b.stepMove(step, b.documentArchive)
 			case "runScript":
-				sr <- stepRunScript(ctx, step)
+				sr <- b.stepRunScript(ctx, step)
 			case "runScriptDownloadUrls":
-				sr <- stepRunScriptDownloadUrls(ctx, step)
+				sr <- b.stepRunScriptDownloadUrls(ctx, step)
 			}
 		}()
 
 		select {
 		case lsr := <-sr:
-			newDocumentsText := strconv.Itoa(newFilesCount) + " new documents"
-			if newFilesCount == 1 {
+			newDocumentsText := strconv.Itoa(b.newFilesCount) + " new documents"
+			if b.newFilesCount == 1 {
 				newDocumentsText = "One new document"
 			}
-			if newFilesCount == 0 {
+			if b.newFilesCount == 0 {
 				newDocumentsText = "No new documents"
 			}
 			if lsr.Status == "success" {
@@ -146,7 +170,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 					StatusTextFormatted: "- " + textStyleBold(recipe.Provider) + ": " + newDocumentsText,
 					LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
 					LastStepDescription: step.Description,
-					NewFilesCount:       newFilesCount,
+					NewFilesCount:       b.newFilesCount,
 				}
 			} else {
 				result = utils.RecipeResult{
@@ -156,9 +180,9 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 					LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
 					LastStepDescription: step.Description,
 					LastErrorMessage:    lsr.Message,
-					NewFilesCount:       newFilesCount,
+					NewFilesCount:       b.newFilesCount,
 				}
-				err = utils.TruncateDirectory(downloadsDirectory)
+				err = utils.TruncateDirectory(b.downloadsDirectory)
 				if err != nil {
 					// TODO Implement error handling
 					fmt.Println(err)
@@ -166,16 +190,16 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 				return result
 			}
 
-		case <-time.After(recipeTimeout):
+		case <-time.After(b.recipeTimeout):
 			result = utils.RecipeResult{
 				Status:              "error",
 				StatusText:          recipe.Provider + " aborted with timeout.",
 				StatusTextFormatted: "x " + textStyleBold(recipe.Provider) + " aborted with timeout.",
 				LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
 				LastStepDescription: step.Description,
-				NewFilesCount:       newFilesCount,
+				NewFilesCount:       b.newFilesCount,
 			}
-			err = utils.TruncateDirectory(downloadsDirectory)
+			err = utils.TruncateDirectory(b.downloadsDirectory)
 			if err != nil {
 				// TODO Implement error handling
 				fmt.Println(err)
@@ -187,7 +211,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 		n++
 	}
 
-	err = utils.TruncateDirectory(downloadsDirectory)
+	err = utils.TruncateDirectory(b.downloadsDirectory)
 	if err != nil {
 		// TODO Implement error handling
 		fmt.Println(err)
@@ -195,20 +219,20 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 	return result
 }
 
-func Quit() error {
-	if browserCtx != nil {
-		return chromedp.Cancel(browserCtx)
+func (b *BrowserDriver) Quit() error {
+	if b.browserCtx != nil {
+		return chromedp.Cancel(b.browserCtx)
 	}
 
 	return nil
 }
 
-func stepOpen(ctx context.Context, step parser.Step) utils.StepResult {
+func (b *BrowserDriver) stepOpen(ctx context.Context, step parser.Step) utils.StepResult {
 	if err := chromedp.Run(ctx,
 		// navigate to the page
 		chromedp.Navigate(step.URL),
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			_ = waitForLoadEvent(ctx)
+			_ = b.waitForLoadEvent(ctx)
 			return nil
 		}),
 	); err != nil {
@@ -217,7 +241,7 @@ func stepOpen(ctx context.Context, step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
-func stepRemoveElement(ctx context.Context, step parser.Step) utils.StepResult {
+func (b *BrowserDriver) stepRemoveElement(ctx context.Context, step parser.Step) utils.StepResult {
 	nodeName := "node" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := chromedp.Run(ctx,
 		chromedp.Evaluate("let "+nodeName+" = document.querySelector('"+step.Selector+"'); "+nodeName+".parentNode.removeChild("+nodeName+")", nil),
@@ -227,7 +251,7 @@ func stepRemoveElement(ctx context.Context, step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
-func stepClick(ctx context.Context, step parser.Step) utils.StepResult {
+func (b *BrowserDriver) stepClick(ctx context.Context, step parser.Step) utils.StepResult {
 	if err := chromedp.Run(ctx,
 		chromedp.Click(step.Selector, chromedp.NodeReady),
 	); err != nil {
@@ -236,8 +260,8 @@ func stepClick(ctx context.Context, step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
-func stepType(ctx context.Context, step parser.Step, credentials *vault.Credentials) utils.StepResult {
-	step.Value = parseCredentialPlaceholders(step.Value, credentials)
+func (b *BrowserDriver) stepType(ctx context.Context, step parser.Step, credentials *vault.Credentials) utils.StepResult {
+	step.Value = b.parseCredentialPlaceholders(step.Value, credentials)
 
 	if err := chromedp.Run(ctx,
 		chromedp.SendKeys(step.Selector, step.Value, chromedp.NodeReady),
@@ -247,7 +271,7 @@ func stepType(ctx context.Context, step parser.Step, credentials *vault.Credenti
 	return utils.StepResult{Status: "success"}
 }
 
-func stepSleep(ctx context.Context, step parser.Step) utils.StepResult {
+func (b *BrowserDriver) stepSleep(ctx context.Context, step parser.Step) utils.StepResult {
 	seconds, _ := strconv.Atoi(step.Value)
 	if err := chromedp.Run(ctx,
 		chromedp.Sleep(time.Duration(seconds)*time.Second),
@@ -257,7 +281,7 @@ func stepSleep(ctx context.Context, step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
-func stepWaitFor(ctx context.Context, step parser.Step) utils.StepResult {
+func (b *BrowserDriver) stepWaitFor(ctx context.Context, step parser.Step) utils.StepResult {
 	if err := chromedp.Run(ctx,
 		chromedp.WaitReady(step.Selector),
 	); err != nil {
@@ -266,7 +290,7 @@ func stepWaitFor(ctx context.Context, step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
-func stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
+func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	var nodes []*cdp.Node
 	err := chromedp.Run(ctx, chromedp.Tasks{
 		chromedp.WaitReady(step.Selector),
@@ -322,16 +346,16 @@ func stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
-func stepTransform(step parser.Step) utils.StepResult {
+func (b *BrowserDriver) stepTransform(step parser.Step) utils.StepResult {
 	switch step.Value {
 	case "unzip":
-		zipFiles, err := utils.FindFiles(downloadsDirectory, ".zip")
+		zipFiles, err := utils.FindFiles(b.downloadsDirectory, ".zip")
 		if err != nil {
 			// TODO improve error handling
 			fmt.Println(err)
 		}
 		for _, s := range zipFiles {
-			err := utils.UnzipFile(s, downloadsDirectory)
+			err := utils.UnzipFile(s, b.downloadsDirectory)
 			if err != nil {
 				return utils.StepResult{Status: "error", Message: err.Error()}
 			}
@@ -341,9 +365,9 @@ func stepTransform(step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
-func stepMove(step parser.Step, documentArchive *archive.DocumentArchive) utils.StepResult {
-	newFilesCount = 0
-	err := filepath.WalkDir(downloadsDirectory, func(s string, d fs.DirEntry, e error) error {
+func (b *BrowserDriver) stepMove(step parser.Step, documentArchive *archive.DocumentArchive) utils.StepResult {
+	b.newFilesCount = 0
+	err := filepath.WalkDir(b.downloadsDirectory, func(s string, d fs.DirEntry, e error) error {
 		if e != nil {
 			return e
 		}
@@ -352,11 +376,11 @@ func stepMove(step parser.Step, documentArchive *archive.DocumentArchive) utils.
 			return e
 		}
 		if match {
-			srcFile := filepath.Join(downloadsDirectory, d.Name())
+			srcFile := filepath.Join(b.downloadsDirectory, d.Name())
 			// Check if file already exists
 			if !documentArchive.FileExists(srcFile) {
-				newFilesCount++
-				_, err := utils.CopyFile(srcFile, filepath.Join(documentsDirectory, d.Name()))
+				b.newFilesCount++
+				_, err := utils.CopyFile(srcFile, filepath.Join(b.documentsDirectory, d.Name()))
 				if err != nil {
 					return err
 				}
@@ -371,7 +395,7 @@ func stepMove(step parser.Step, documentArchive *archive.DocumentArchive) utils.
 	return utils.StepResult{Status: "success"}
 }
 
-func stepRunScript(ctx context.Context, step parser.Step) utils.StepResult {
+func (b *BrowserDriver) stepRunScript(ctx context.Context, step parser.Step) utils.StepResult {
 	var res []string
 	log.Println(`SCRIPT: ` + step.Value)
 	if err := chromedp.Run(ctx,
@@ -382,7 +406,7 @@ func stepRunScript(ctx context.Context, step parser.Step) utils.StepResult {
 	return utils.StepResult{Status: "success"}
 }
 
-func stepRunScriptDownloadUrls(ctx context.Context, step parser.Step) utils.StepResult {
+func (b *BrowserDriver) stepRunScriptDownloadUrls(ctx context.Context, step parser.Step) utils.StepResult {
 	var res []string
 	log.Println(`SCRIPT DOWNLOAD ARRAY: ` + step.Value)
 	chromedp.Evaluate(`Object.values(`+step.Value+`);`, &res)
@@ -391,11 +415,11 @@ func stepRunScriptDownloadUrls(ctx context.Context, step parser.Step) utils.Step
 		if err := chromedp.Run(ctx,
 			browser.
 				SetDownloadBehavior(browser.SetDownloadBehaviorBehaviorAllowAndName).
-				WithDownloadPath(downloadsDirectory).
+				WithDownloadPath(b.downloadsDirectory).
 				WithEventsEnabled(true),
 			chromedp.Navigate(url),
 			chromedp.ActionFunc(func(ctx context.Context) error {
-				_ = waitForLoadEvent(ctx)
+				_ = b.waitForLoadEvent(ctx)
 				return nil
 			}),
 		); err != nil {
@@ -406,14 +430,14 @@ func stepRunScriptDownloadUrls(ctx context.Context, step parser.Step) utils.Step
 	return utils.StepResult{Status: "success"}
 }
 
-func parseCredentialPlaceholders(value string, credentials *vault.Credentials) string {
+func (b *BrowserDriver) parseCredentialPlaceholders(value string, credentials *vault.Credentials) string {
 	value = strings.Replace(value, "{{ username }}", credentials.Username, -1)
 	value = strings.Replace(value, "{{ password }}", credentials.Password, -1)
 	value = strings.Replace(value, "{{ totp }}", credentials.Totp, -1)
 	return value
 }
 
-func DisableImages(ctx context.Context) func(event interface{}) {
+func (b *BrowserDriver) disableImages(ctx context.Context) func(event interface{}) {
 	return func(event interface{}) {
 		switch ev := event.(type) {
 		case *fetch.EventRequestPaused:
@@ -438,7 +462,7 @@ func DisableImages(ctx context.Context) func(event interface{}) {
 	}
 }
 
-func enableLifeCycleEvents() chromedp.ActionFunc {
+func (b *BrowserDriver) enableLifeCycleEvents() chromedp.ActionFunc {
 	return func(ctx context.Context) error {
 		err := page.Enable().Do(ctx)
 		if err != nil {
@@ -452,7 +476,7 @@ func enableLifeCycleEvents() chromedp.ActionFunc {
 	}
 }
 
-func waitForLoadEvent(ctx context.Context) error {
+func (b *BrowserDriver) waitForLoadEvent(ctx context.Context) error {
 	ch := make(chan struct{})
 	cctx, cancel := context.WithCancel(ctx)
 
