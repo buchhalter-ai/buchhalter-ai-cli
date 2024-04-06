@@ -95,7 +95,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		os.Exit(1)
 	}
 
-	logger.Info("Credential items loaded from vault", "items", vaultItems, "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
+	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
 
 	// Run recipes
 	go runRecipes(p, provider, vaultProvider)
