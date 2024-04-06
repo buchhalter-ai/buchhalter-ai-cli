@@ -62,7 +62,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		fmt.Printf("Error on initializing logging: %s\n", err)
 		os.Exit(1)
 	}
-	logger.Info("Starting")
+	logger.Info("Starting", "development_mode", viper.GetBool("dev"))
 	defer logger.Info("Shutting down")
 
 	// Init document archive
@@ -118,6 +118,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 }
 
 func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
+	// TODO Add logging for runRecipes
 	t := "Build archive index"
 	p.Send(resultStatusUpdate{title: t})
 
@@ -219,6 +220,7 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 }
 
 func prepareRecipes(provider string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) []recipeToExecute {
+	// TODO Add logging for prepareRecipes
 	devMode := viper.GetBool("dev")
 	loadRecipeResult, err := recipeParser.LoadRecipes(devMode)
 	if err != nil {
@@ -256,6 +258,8 @@ func prepareRecipes(provider string, vaultProvider *vault.Provider1Password, rec
 }
 
 func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, vaultVersion, oicdbVersion string) {
+	// TODO Add logging for sendMetrics
+
 	err := buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultVersion, oicdbVersion)
 	if err != nil {
 		// TODO Implement better error handling
@@ -392,6 +396,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
+			m.logger.Info("Initiating shutdown sequence", "key_hit", msg.String())
+
 			mn := quit(m)
 			return mn, tea.Quit
 
@@ -414,6 +420,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				mn := quit(m)
 				return mn, tea.Quit
 			}
+
 		case "down", "j":
 			m.cursor++
 			if m.cursor >= len(choices) {
@@ -426,9 +433,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = len(choices) - 1
 			}
 		}
+
 		return m, nil
 
 	case quitMsg:
+		m.logger.Info("Initiating shutdown sequence")
+
 		mn := quit(m)
 		return mn, tea.Quit
 
