@@ -67,9 +67,6 @@ type Step struct {
 	Execute                  string            `json:"execute,omitempty"`
 }
 
-// TODO is this type in use?
-type Urls []string
-
 func NewRecipeParser(buchhalterConfigDirectory, buchhalterDirectory string) *RecipeParser {
 	return &RecipeParser{
 		configDirectory:  buchhalterConfigDirectory,
