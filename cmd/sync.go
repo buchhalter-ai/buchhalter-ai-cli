@@ -145,7 +145,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 		}
 	}
 
-	r := prepareRecipes(provider, vaultProvider, recipeParser)
+	r := prepareRecipes(logger, provider, vaultProvider, recipeParser)
 
 	// TODO when len(r) is zero (no recipe) or vault-item found, an error should be posted
 
@@ -237,12 +237,13 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 	}
 }
 
-func prepareRecipes(provider string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) []recipeToExecute {
-	// TODO Add logging for prepareRecipes
+func prepareRecipes(logger *slog.Logger, provider string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) []recipeToExecute {
 	devMode := viper.GetBool("dev")
+	logger.Info("Loading recipes for suppliers", "development_mode", devMode)
 	loadRecipeResult, err := recipeParser.LoadRecipes(devMode)
 	if err != nil {
 		// TODO Implement better error handling
+		logger.Error("Error loading recipes for suppliers", "error", err)
 		fmt.Println(loadRecipeResult)
 		fmt.Println(err)
 	}
@@ -252,15 +253,19 @@ func prepareRecipes(provider string, vaultProvider *vault.Provider1Password, rec
 	sc := 0
 	vaultItems := vaultProvider.VaultItems
 	if provider != "" {
+		logger.Info("Search for credentials for suppliers recipe ...", "supplier", provider)
 		for i := range vaultItems {
 			// Check if a recipe exists for the item
 			recipe := recipeParser.GetRecipeForItem(vaultItems[i], vaultProvider.UrlsByItemId)
 			if recipe != nil && provider == recipe.Provider {
 				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
+				logger.Info("Search for credentials for suppliers recipe ... found", "supplier", provider, "credentials_id", vaultItems[i].ID)
 			}
 		}
 
 	} else {
+		logger.Info("Search for matching pairs of recipes for supplier recipes and credentials ...")
+
 		// Run all recipes
 		for i := range vaultItems {
 			// Check if a recipe exists for the item
@@ -268,6 +273,7 @@ func prepareRecipes(provider string, vaultProvider *vault.Provider1Password, rec
 			if recipe != nil {
 				sc = sc + len(recipe.Steps)
 				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
+				logger.Info("Search for matching pairs of recipes for supplier recipes and credentials ... found", "supplier", recipe.Provider, "credentials_id", vaultItems[i].ID)
 			}
 		}
 	}
