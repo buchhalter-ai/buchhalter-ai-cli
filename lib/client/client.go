@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chromedp/cdproto/cdp"
 	"io"
 	"log"
 	"log/slog"
@@ -203,8 +204,7 @@ func (b *ClientAuthBrowserDriver) stepOauth2CheckTokens(ctx context.Context, rec
 	// Try to get secrets from cache
 	pii := recipe.Provider + "|" + credentials.Id
 	tokens, err := secrets.GetOauthAccessTokenFromCache(pii, buchhalterConfigDirectory)
-
-	if err != nil {
+	if err == nil {
 		if b.validOauth2AuthToken(tokens) {
 			b.logger.Info("Found valid oauth2 access token in cache")
 			b.oauth2AuthToken = tokens.AccessToken
@@ -254,7 +254,6 @@ func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, re
 	params.Add("code_challenge_method", b.oauth2PkceMethod)
 	loginUrl := b.oauth2AuthUrl + "?" + params.Encode()
 
-	var u string
 	b.listenForNetworkEvent(ctx)
 	err = chromedp.Run(ctx,
 		b.run(5*time.Second, chromedp.Navigate(loginUrl)),
@@ -269,10 +268,43 @@ func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, re
 		chromedp.SendKeys("#form-input-credential", credentials.Password, chromedp.ByID),
 		chromedp.Sleep(2*time.Second),
 		chromedp.Click("#form-submit-continue", chromedp.ByID),
-		chromedp.Sleep(5*time.Second),
+		chromedp.Sleep(2*time.Second),
+	)
+
+	/** Check for 2FA authentication */
+	var faNodes []*cdp.Node
+	err = chromedp.Run(ctx,
+		b.run(5*time.Second, chromedp.WaitVisible(`#form-input-passcode`, chromedp.ByID)),
+		chromedp.Nodes("#form-input-passcode", &faNodes, chromedp.AtLeast(0)),
+	)
+
+	if err != nil {
+		b.logger.Error("Error while logging in", "error", err.Error())
+		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
+	}
+
+	/** Insert 2FA code */
+	if len(faNodes) > 0 {
+		err = chromedp.Run(ctx,
+			chromedp.SendKeys("#form-input-passcode", credentials.Totp, chromedp.ByID),
+			chromedp.Click("#form-submit", chromedp.ByID),
+		)
+	}
+
+	if err != nil {
+		b.logger.Error("Error while logging in", "error", err.Error())
+		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
+	}
+
+	/** Request access token */
+	var u string
+	err = chromedp.Run(ctx,
+		chromedp.Sleep(2*time.Second),
 		chromedp.Location(&u),
 	)
+
 	if err != nil {
+		b.logger.Error("Error while requesting access token", "error", err.Error())
 		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
 	}
 
@@ -291,9 +323,10 @@ func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, re
 	pii := recipe.Provider + "|" + credentials.Id
 	tokens, err := b.getOauth2Tokens(ctx, payload, pii, buchhalterConfigDirectory)
 	if err != nil {
+		b.logger.Error("Error while getting fresh OAuth2 access token", "error", err.Error())
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
-
+	b.logger.Info("Successfully retrieved new OAuth2 access tokens.")
 	b.oauth2AuthToken = tokens.AccessToken
 	return utils.StepResult{Status: "success", Message: "Successfully retrieved OAuth2 tokens."}
 }
