@@ -1,7 +1,9 @@
 package parser
 
 import (
+	"crypto/sha1"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -228,4 +230,29 @@ func (p *RecipeParser) getRecipeIndexByProvider(provider string) int {
 	}
 
 	return -1
+}
+
+func (p *RecipeParser) GetChecksumOfLocalOICDB() (string, error) {
+	oicdbFile := filepath.Join(p.configDirectory, "oicdb.json")
+	p.logger.Info("Calculate checksum of local Open Invoice Collector Database ...", "database", oicdbFile)
+
+	if _, err := os.Stat(oicdbFile); errors.Is(err, os.ErrNotExist) {
+		p.logger.Info("Local Open Invoice Collector Database does not exist yet", "database", oicdbFile)
+		return "", nil
+	}
+
+	f, err := os.Open(oicdbFile)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha1.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	checksum := fmt.Sprintf("%x", h.Sum(nil))
+	p.logger.Info("Checksum of local Open Invoice Collector Database calculated", "database", oicdbFile, "checksum", checksum)
+
+	return checksum, nil
 }
