@@ -81,7 +81,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
-	recipeParser := parser.NewRecipeParser(buchhalterConfigDirectory, buchhalterDirectory)
+	recipeParser := parser.NewRecipeParser(logger, buchhalterConfigDirectory, buchhalterDirectory)
 
 	repositoryUrl := viper.GetString("buchhalter_repository_url")
 	metricsUrl := viper.GetString("buchhalter_metrics_url")
