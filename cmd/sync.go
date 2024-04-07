@@ -184,7 +184,11 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 				ChromeVersion = browserDriver.ChromeVersion
 			}
 			// TODO Should we quit it here or inside RunRecipe?
-			browserDriver.Quit()
+			err = browserDriver.Quit()
+			if err != nil {
+				// TODO Implement better error handling
+				fmt.Println(err)
+			}
 		case "client":
 			browserDriver := client.NewClientAuthBrowserDriver(recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
 			recipeResult = browserDriver.RunRecipe(p, tsc, scs, bcs, r[i].recipe)
@@ -192,7 +196,11 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 				ChromeVersion = browserDriver.ChromeVersion
 			}
 			// TODO Should we quit it here or inside RunRecipe?
-			browserDriver.Quit()
+			err = browserDriver.Quit()
+			if err != nil {
+				// TODO Implement better error handling
+				fmt.Println(err)
+			}
 		}
 		rdx := repository.RunDataProvider{
 			Provider:         r[i].recipe.Provider,
