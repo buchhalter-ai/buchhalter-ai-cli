@@ -80,18 +80,19 @@ func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
-			out, err := os.Create(filepath.Join(c.configDirectory, "oicdb.json"))
+			fileToUpdate := filepath.Join(c.configDirectory, "oicdb.json")
+			out, err := os.Create(fileToUpdate)
 			if err != nil {
 				return fmt.Errorf("couldn't create oicdb.json file: %w", err)
 			}
 			defer out.Close()
 
-			_, err = io.Copy(out, resp.Body)
+			bytesCopied, err := io.Copy(out, resp.Body)
 			if err != nil {
 				return fmt.Errorf("error copying response body to file: %w", err)
 			}
 
-			c.logger.Info("Starting to update the local OICDB repository ... completed")
+			c.logger.Info("Starting to update the local OICDB repository ... completed", "database", fileToUpdate, "bytes_written", bytesCopied)
 			return nil
 		}
 		return fmt.Errorf("http request to %s failed with status code: %d", c.repositoryUrl, resp.StatusCode)
