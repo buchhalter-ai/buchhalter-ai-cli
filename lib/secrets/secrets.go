@@ -105,7 +105,12 @@ func readSecretsFile(buchhalterConfigDirectory string) (secretFile, error) {
 
 	sef := filepath.Join(buchhalterConfigDirectory, secretsFilename)
 	if _, err := os.Stat(sef); os.IsNotExist(err) {
-		err = os.WriteFile(filepath.Join(buchhalterConfigDirectory, secretsFilename), nil, 0600)
+		emptyFile := secretFile{}
+		emptyFileJson, err := json.Marshal(emptyFile)
+		if err != nil {
+			return sfe, err
+		}
+		err = os.WriteFile(filepath.Join(buchhalterConfigDirectory, secretsFilename), emptyFileJson, 0600)
 		if err != nil {
 			return sfe, err
 		}
