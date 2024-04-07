@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +15,8 @@ import (
 )
 
 type RecipeParser struct {
+	logger *slog.Logger
+
 	configDirectory  string
 	storageDirectory string
 
@@ -67,8 +70,9 @@ type Step struct {
 	Execute                  string            `json:"execute,omitempty"`
 }
 
-func NewRecipeParser(buchhalterConfigDirectory, buchhalterDirectory string) *RecipeParser {
+func NewRecipeParser(logger *slog.Logger, buchhalterConfigDirectory, buchhalterDirectory string) *RecipeParser {
 	return &RecipeParser{
+		logger:           logger,
 		configDirectory:  buchhalterConfigDirectory,
 		storageDirectory: buchhalterDirectory,
 
@@ -96,14 +100,19 @@ func (p *RecipeParser) LoadRecipes(developmentMode bool) (bool, error) {
 		return false, err
 	}
 	p.OicdbVersion = p.database.Version
+	p.logger.Info("Loaded official recipes for suppliers", "num_recipes", len(p.database.Recipes), "oicdb_version", p.OicdbVersion)
 
-	/** Create local recipes directory if not exists */
+	// Create local recipes directory if not exists
 	if developmentMode {
+		p.logger.Info("Loading local recipes for suppliers ...", "development_mode", developmentMode)
+		numOfficialRecipes := len(p.database.Recipes)
 		p.OicdbVersion = p.OicdbVersion + "-dev"
 		err = p.loadLocalRecipes(p.storageDirectory)
 		if err != nil {
 			return false, err
 		}
+
+		p.logger.Info("Loaded local recipes for suppliers", "num_recipes", len(p.database.Recipes)-numOfficialRecipes, "oicdb_version", p.OicdbVersion)
 	}
 
 	for i := 0; i < len(p.database.Recipes); i++ {
@@ -166,8 +175,8 @@ func (p *RecipeParser) loadLocalRecipes(buchhalterDirectory string) error {
 		}
 	}
 
-	/** Load local recipes */
-	files, err := os.ReadDir(recipesDir) // Replace ioutil.ReadDir with os.ReadDir
+	// Load local recipes
+	files, err := os.ReadDir(recipesDir)
 	if err != nil {
 		return err
 	}
@@ -187,21 +196,24 @@ func (p *RecipeParser) loadLocalRecipes(buchhalterDirectory string) error {
 		}
 		n := p.getRecipeIndexByProvider(filenameWithoutExtension)
 		if n >= 0 {
-			/** Replace recipe if exists */
+			// Replace recipe if exists
 			var newRecipe Recipe
 			err = json.Unmarshal(byteValue, &newRecipe)
 			if err != nil {
 				return err
 			}
 			p.database.Recipes[n] = newRecipe
+			p.logger.Info("Replaced official recipe with local recipes for suppliers", "supplier", newRecipe.Provider)
+
 		} else {
-			/** Add recipe if not exists */
+			// Add recipe if not exists
 			var recipe Recipe
 			err = json.Unmarshal(byteValue, &recipe)
 			if err != nil {
 				return err
 			}
 			p.database.Recipes = append(p.database.Recipes, recipe)
+			p.logger.Info("Loaded local recipes for supplier", "supplier", recipe.Provider)
 		}
 	}
 

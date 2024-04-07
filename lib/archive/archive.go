@@ -5,17 +5,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 )
 
 type DocumentArchive struct {
+	logger *slog.Logger
+
 	storageDirectory string
 	fileHashes       []string
 }
 
-func NewDocumentArchive(archiveDirectory string) *DocumentArchive {
+func NewDocumentArchive(logger *slog.Logger, archiveDirectory string) *DocumentArchive {
 	return &DocumentArchive{
+		logger:           logger,
 		storageDirectory: archiveDirectory,
 
 		// TODO Check if this can be replaced by a hashmap for better performance.
@@ -42,6 +46,8 @@ func (a *DocumentArchive) BuildArchiveIndex() error {
 	if err != nil {
 		return fmt.Errorf("error walking the directory: %w", err)
 	}
+
+	a.logger.Info("Building document archive index ... completed", "files_in_index", len(a.fileHashes))
 
 	return nil
 }

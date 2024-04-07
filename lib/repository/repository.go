@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,6 +15,8 @@ import (
 )
 
 type BuchhalterAPIClient struct {
+	logger *slog.Logger
+
 	configDirectory string
 	repositoryUrl   string
 	metricsUrl      string
@@ -40,8 +43,9 @@ type RunDataProvider struct {
 	NewFilesCount    int     `json:"newFilesCount,omitempty"`
 }
 
-func NewBuchhalterAPIClient(configDirectory, repositoryUrl, metricsUrl, cliVersion string) *BuchhalterAPIClient {
+func NewBuchhalterAPIClient(logger *slog.Logger, configDirectory, repositoryUrl, metricsUrl, cliVersion string) *BuchhalterAPIClient {
 	return &BuchhalterAPIClient{
+		logger:          logger,
 		configDirectory: configDirectory,
 		repositoryUrl:   repositoryUrl,
 		metricsUrl:      metricsUrl,
@@ -52,20 +56,18 @@ func NewBuchhalterAPIClient(configDirectory, repositoryUrl, metricsUrl, cliVersi
 func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
 	updateExists, err := c.updateExists(c.repositoryUrl, currentChecksum)
 	if err != nil {
-		fmt.Printf("You're offline. Please connect to the internet for using buchhalter-cli")
-		os.Exit(1)
+		return fmt.Errorf("you're offline - please connect to the internet for using buchhalter-cli: %w", err)
 	}
 
 	if updateExists {
+		c.logger.Info("Starting to update the local OICDB repository ...")
 		client := &http.Client{
 			Timeout: 10 * time.Second,
 		}
 		ctx := context.Background()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.repositoryUrl, nil)
 		if err != nil {
-			if err != nil {
-				return err
-			}
+			return err
 		}
 
 		req.Header.Set("User-Agent", c.userAgent)
@@ -78,17 +80,19 @@ func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
-			out, err := os.Create(filepath.Join(c.configDirectory, "oicdb.json"))
+			fileToUpdate := filepath.Join(c.configDirectory, "oicdb.json")
+			out, err := os.Create(fileToUpdate)
 			if err != nil {
 				return fmt.Errorf("couldn't create oicdb.json file: %w", err)
 			}
 			defer out.Close()
 
-			_, err = io.Copy(out, resp.Body)
+			bytesCopied, err := io.Copy(out, resp.Body)
 			if err != nil {
 				return fmt.Errorf("error copying response body to file: %w", err)
 			}
 
+			c.logger.Info("Starting to update the local OICDB repository ... completed", "database", fileToUpdate, "bytes_written", bytesCopied)
 			return nil
 		}
 		return fmt.Errorf("http request to %s failed with status code: %d", c.repositoryUrl, resp.StatusCode)
@@ -120,8 +124,11 @@ func (c *BuchhalterAPIClient) updateExists(repositoryUrl, currentChecksum string
 		checksum := resp.Header.Get("x-checksum")
 		if checksum != "" {
 			if checksum == currentChecksum {
+				c.logger.Info("No new updates for OICDB repository available", "local_checksum", currentChecksum, "remote_checksum", checksum)
 				return false, nil
 			}
+
+			c.logger.Info("New updates for OICDB repository available", "local_checksum", currentChecksum, "remote_checksum", checksum)
 			return true, nil
 		}
 

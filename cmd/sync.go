@@ -62,11 +62,11 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		fmt.Printf("Error on initializing logging: %s\n", err)
 		os.Exit(1)
 	}
-	logger.Info("Starting", "development_mode", viper.GetBool("dev"))
+	logger.Info("Booting up", "development_mode", viper.GetBool("dev"))
 	defer logger.Info("Shutting down")
 
 	// Init document archive
-	documentArchive := archive.NewDocumentArchive(buchhalterDirectory)
+	documentArchive := archive.NewDocumentArchive(logger, buchhalterDirectory)
 
 	// Init vault provider
 	vaultConfigBinary := viper.GetString("credential_provider_cli_command")
@@ -81,11 +81,11 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
-	recipeParser := parser.NewRecipeParser(buchhalterConfigDirectory, buchhalterDirectory)
+	recipeParser := parser.NewRecipeParser(logger, buchhalterConfigDirectory, buchhalterDirectory)
 
 	repositoryUrl := viper.GetString("buchhalter_repository_url")
 	metricsUrl := viper.GetString("buchhalter_metrics_url")
-	buchhalterAPIClient := repository.NewBuchhalterAPIClient(buchhalterConfigDirectory, repositoryUrl, metricsUrl, CliVersion)
+	buchhalterAPIClient := repository.NewBuchhalterAPIClient(logger, buchhalterConfigDirectory, repositoryUrl, metricsUrl, CliVersion)
 
 	viewModel := initialModel(logger, vaultProvider, buchhalterAPIClient, recipeParser)
 	p := tea.NewProgram(viewModel)
@@ -108,7 +108,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
 
 	// Run recipes
-	go runRecipes(p, provider, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
+	go runRecipes(p, logger, provider, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
 
 	if _, err := p.Run(); err != nil {
 		logger.Error("Error running program", "error", err)
@@ -117,39 +117,51 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 }
 
-func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
-	// TODO Add logging for runRecipes
+func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
 	t := "Build archive index"
 	p.Send(resultStatusUpdate{title: t})
 
+	logger.Info("Building document archive index ...")
 	err := documentArchive.BuildArchiveIndex()
 	if err != nil {
 		// TODO Implement better error handling
+		logger.Error("Error building document archive index", "error", err)
 		fmt.Println(err)
 	}
 
+	developmentMode := viper.GetBool("dev")
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
-	if !viper.GetBool("dev") {
+	if !developmentMode {
 		t = "Checking for repository updates"
 		p.Send(resultStatusUpdate{title: t})
 
 		// TODO Where do we get this from?
 		currentChecksum := viper.GetString("buchhalter_repository_checksum")
+		logger.Info("Checking for OICDB repository updates ...", "local_checksum", currentChecksum)
 		err := buchhalterAPIClient.UpdateIfAvailable(currentChecksum)
 		if err != nil {
+			logger.Error("Error checking for OICDB repository updates", "error", err)
 			fmt.Println(err)
 			os.Exit(1)
 		}
 	}
 
-	r := prepareRecipes(provider, vaultProvider, recipeParser)
-
-	// TODO when len(r) is zero (no recipe) or vault-item found, an error should be posted
+	r := prepareRecipes(logger, provider, vaultProvider, recipeParser)
+	// No credentials found for provider/recipes
+	if len(r) == 0 {
+		// TODO Implement better error handling
+		logger.Error("No recipes found for suppliers", "provider", provider)
+		fmt.Println("No recipes found for suppliers")
+		os.Exit(1)
+	}
 
 	rc := len(r)
-	t = "Running recipes for " + fmt.Sprintf("%d", rc) + " suppliers..."
 	if rc == 1 {
 		t = "Running one recipe..."
+		logger.Info("Running one recipe ...", "supplier", r[0].recipe.Provider)
+	} else {
+		t = "Running recipes for " + fmt.Sprintf("%d", rc) + " suppliers..."
+		logger.Info("Running recipes for multiple suppliers...", "num_suppliers", rc)
 	}
 	p.Send(resultStatusUpdate{title: t})
 	p.Send(ResultProgressUpdate{Percent: 0.001})
@@ -169,13 +181,16 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 		p.Send(resultStatusUpdate{title: "Downloading invoices from " + r[i].recipe.Provider + ":", hasError: false})
 
 		// Load username, password, totp from vault
+		logger.Info("Requesting credentials from vault", "supplier", r[i].recipe.Provider)
 		recipeCredentials, err := vaultProvider.GetCredentialsByItemId(r[i].vaultItemId)
 		if err != nil {
 			// TODO Implement better error handling
+			logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
 			fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
 			continue
 		}
 
+		logger.Info("Downloading invoices ...", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type)
 		switch r[i].recipe.Type {
 		case "browser":
 			browserDriver := browser.NewBrowserDriver(recipeCredentials, buchhalterDirectory, documentArchive)
@@ -211,19 +226,30 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 			NewFilesCount:    recipeResult.NewFilesCount,
 		}
 		RunData = append(RunData, rdx)
+		// TODO Check for recipeResult.LastErrorMessage
 		p.Send(resultMsg{duration: time.Since(s), newFilesCount: recipeResult.NewFilesCount, step: recipeResult.StatusTextFormatted, errorMessage: recipeResult.LastErrorMessage})
+		logger.Info("Downloading invoices ... completed", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type, "duration", time.Since(s), "new_files", recipeResult.NewFilesCount)
+
 		bcs += scs
 	}
 
-	if viper.GetBool("buchhalter_always_send_metrics") {
+	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")
+	if !developmentMode && alwaysSendMetrics {
+		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)
 		err = buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
 		if err != nil {
 			// TODO Implement better error handling
+			logger.Error("Error sending usage metrics to Buchhalter API", "error", err)
 			fmt.Println(err)
 		}
+
+		logger.Info("Initializing shutdown")
 		p.Send(quitMsg{})
-	} else if viper.GetBool("dev") {
+
+	} else if developmentMode {
+		logger.Info("Initializing shutdown")
 		p.Send(quitMsg{})
+
 	} else {
 		p.Send(resultModeUpdate{
 			mode:    "sendMetrics",
@@ -233,12 +259,13 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 	}
 }
 
-func prepareRecipes(provider string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) []recipeToExecute {
-	// TODO Add logging for prepareRecipes
-	devMode := viper.GetBool("dev")
-	loadRecipeResult, err := recipeParser.LoadRecipes(devMode)
+func prepareRecipes(logger *slog.Logger, provider string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) []recipeToExecute {
+	developmentMode := viper.GetBool("dev")
+	logger.Info("Loading recipes for suppliers ...", "development_mode", developmentMode)
+	loadRecipeResult, err := recipeParser.LoadRecipes(developmentMode)
 	if err != nil {
 		// TODO Implement better error handling
+		logger.Error("Error loading recipes for suppliers", "error", err)
 		fmt.Println(loadRecipeResult)
 		fmt.Println(err)
 	}
@@ -248,15 +275,19 @@ func prepareRecipes(provider string, vaultProvider *vault.Provider1Password, rec
 	sc := 0
 	vaultItems := vaultProvider.VaultItems
 	if provider != "" {
+		logger.Info("Search for credentials for suppliers recipe ...", "supplier", provider)
 		for i := range vaultItems {
 			// Check if a recipe exists for the item
 			recipe := recipeParser.GetRecipeForItem(vaultItems[i], vaultProvider.UrlsByItemId)
 			if recipe != nil && provider == recipe.Provider {
 				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
+				logger.Info("Search for credentials for suppliers recipe ... found", "supplier", provider, "credentials_id", vaultItems[i].ID)
 			}
 		}
 
 	} else {
+		logger.Info("Search for matching pairs of recipes for supplier recipes and credentials ...")
+
 		// Run all recipes
 		for i := range vaultItems {
 			// Check if a recipe exists for the item
@@ -264,6 +295,7 @@ func prepareRecipes(provider string, vaultProvider *vault.Provider1Password, rec
 			if recipe != nil {
 				sc = sc + len(recipe.Steps)
 				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
+				logger.Info("Search for matching pairs of recipes for supplier recipes and credentials ... found", "supplier", recipe.Provider, "credentials_id", vaultItems[i].ID)
 			}
 		}
 	}
