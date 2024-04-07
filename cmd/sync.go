@@ -62,7 +62,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		fmt.Printf("Error on initializing logging: %s\n", err)
 		os.Exit(1)
 	}
-	logger.Info("Starting", "development_mode", viper.GetBool("dev"))
+	logger.Info("Booting up", "development_mode", viper.GetBool("dev"))
 	defer logger.Info("Shutting down")
 
 	// Init document archive
@@ -121,7 +121,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 	t := "Build archive index"
 	p.Send(resultStatusUpdate{title: t})
 
-	logger.Info("Building document archive index")
+	logger.Info("Building document archive index ...")
 	err := documentArchive.BuildArchiveIndex()
 	if err != nil {
 		// TODO Implement better error handling
@@ -136,7 +136,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 
 		// TODO Where do we get this from?
 		currentChecksum := viper.GetString("buchhalter_repository_checksum")
-		logger.Info("Checking for OICDB repository updates", "local_checksum", currentChecksum)
+		logger.Info("Checking for OICDB repository updates ...", "local_checksum", currentChecksum)
 		err := buchhalterAPIClient.UpdateIfAvailable(currentChecksum)
 		if err != nil {
 			logger.Error("Error checking for OICDB repository updates", "error", err)
@@ -157,7 +157,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 	rc := len(r)
 	if rc == 1 {
 		t = "Running one recipe..."
-		logger.Info("Running one recipe...")
+		logger.Info("Running one recipe ...", "supplier", r[0].recipe.Provider)
 	} else {
 		t = "Running recipes for " + fmt.Sprintf("%d", rc) + " suppliers..."
 		logger.Info("Running recipes for multiple suppliers...", "num_suppliers", rc)
@@ -189,7 +189,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 			continue
 		}
 
-		logger.Info("Downloading invoices", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type)
+		logger.Info("Downloading invoices ...", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type)
 		switch r[i].recipe.Type {
 		case "browser":
 			recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterDirectory, documentArchive)
@@ -211,8 +211,9 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 			NewFilesCount:    recipeResult.NewFilesCount,
 		}
 		RunData = append(RunData, rdx)
+		// TODO Check for recipeResult.LastErrorMessage
 		p.Send(resultMsg{duration: time.Since(s), newFilesCount: recipeResult.NewFilesCount, step: recipeResult.StatusTextFormatted, errorMessage: recipeResult.LastErrorMessage})
-		logger.Info("Downloading invoices completed", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type, "duration", time.Since(s), "new_files", recipeResult.NewFilesCount, "error", recipeResult.LastErrorMessage)
+		logger.Info("Downloading invoices ... completed", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type, "duration", time.Since(s), "new_files", recipeResult.NewFilesCount)
 
 		bcs += scs
 	}
@@ -244,7 +245,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 
 func prepareRecipes(logger *slog.Logger, provider string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) []recipeToExecute {
 	devMode := viper.GetBool("dev")
-	logger.Info("Loading recipes for suppliers", "development_mode", devMode)
+	logger.Info("Loading recipes for suppliers ...", "development_mode", devMode)
 	loadRecipeResult, err := recipeParser.LoadRecipes(devMode)
 	if err != nil {
 		// TODO Implement better error handling
