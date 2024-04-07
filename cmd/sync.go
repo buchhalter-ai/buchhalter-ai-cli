@@ -108,7 +108,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
 
 	// Run recipes
-	go runRecipes(p, provider, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
+	go runRecipes(p, logger, provider, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
 
 	if _, err := p.Run(); err != nil {
 		logger.Error("Error running program", "error", err)
@@ -117,14 +117,15 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 }
 
-func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
-	// TODO Add logging for runRecipes
+func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
 	t := "Build archive index"
 	p.Send(resultStatusUpdate{title: t})
 
+	logger.Info("Building document archive index")
 	err := documentArchive.BuildArchiveIndex()
 	if err != nil {
 		// TODO Implement better error handling
+		logger.Error("Error building document archive index", "error", err)
 		fmt.Println(err)
 	}
 
@@ -135,8 +136,10 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 
 		// TODO Where do we get this from?
 		currentChecksum := viper.GetString("buchhalter_repository_checksum")
+		logger.Info("Checking for OICDB repository updates", "local_checksum", currentChecksum)
 		err := buchhalterAPIClient.UpdateIfAvailable(currentChecksum)
 		if err != nil {
+			logger.Error("Error checking for OICDB repository updates", "error", err)
 			fmt.Println(err)
 			os.Exit(1)
 		}
@@ -147,9 +150,12 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 	// TODO when len(r) is zero (no recipe) or vault-item found, an error should be posted
 
 	rc := len(r)
-	t = "Running recipes for " + fmt.Sprintf("%d", rc) + " suppliers..."
 	if rc == 1 {
 		t = "Running one recipe..."
+		logger.Info("Running one recipe...")
+	} else {
+		t = "Running recipes for " + fmt.Sprintf("%d", rc) + " suppliers..."
+		logger.Info("Running recipes for multiple suppliers...", "num_suppliers", rc)
 	}
 	p.Send(resultStatusUpdate{title: t})
 	p.Send(ResultProgressUpdate{Percent: 0.001})
@@ -169,13 +175,16 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 		p.Send(resultStatusUpdate{title: "Downloading invoices from " + r[i].recipe.Provider + ":", hasError: false})
 
 		// Load username, password, totp from vault
+		logger.Info("Requesting credentials from vault", "supplier", r[i].recipe.Provider)
 		recipeCredentials, err := vaultProvider.GetCredentialsByItemId(r[i].vaultItemId)
 		if err != nil {
 			// TODO Implement better error handling
+			logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
 			fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
 			continue
 		}
 
+		logger.Info("Downloading invoices", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type)
 		switch r[i].recipe.Type {
 		case "browser":
 			recipeResult = browser.RunRecipe(p, tsc, scs, bcs, r[i].recipe, recipeCredentials, buchhalterDirectory, documentArchive)
@@ -198,18 +207,27 @@ func runRecipes(p *tea.Program, provider string, vaultProvider *vault.Provider1P
 		}
 		RunData = append(RunData, rdx)
 		p.Send(resultMsg{duration: time.Since(s), newFilesCount: recipeResult.NewFilesCount, step: recipeResult.StatusTextFormatted, errorMessage: recipeResult.LastErrorMessage})
+		logger.Info("Downloading invoices completed", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type, "duration", time.Since(s), "new_files", recipeResult.NewFilesCount, "error", recipeResult.LastErrorMessage)
+
 		bcs += scs
 	}
 
 	if viper.GetBool("buchhalter_always_send_metrics") {
+		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", viper.GetBool("buchhalter_always_send_metrics"))
 		err = buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
 		if err != nil {
 			// TODO Implement better error handling
+			logger.Error("Error sending usage metrics to Buchhalter API", "error", err)
 			fmt.Println(err)
 		}
+
+		logger.Info("Initializing shutdown")
 		p.Send(quitMsg{})
+
 	} else if viper.GetBool("dev") {
+		logger.Info("Initializing shutdown")
 		p.Send(quitMsg{})
+
 	} else {
 		p.Send(resultModeUpdate{
 			mode:    "sendMetrics",
