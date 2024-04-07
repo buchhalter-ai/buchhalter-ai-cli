@@ -146,8 +146,13 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 	}
 
 	r := prepareRecipes(logger, provider, vaultProvider, recipeParser)
-
-	// TODO when len(r) is zero (no recipe) or vault-item found, an error should be posted
+	// No credentials found for provider/recipes
+	if len(r) == 0 {
+		// TODO Implement better error handling
+		logger.Error("No recipes found for suppliers", "provider", provider)
+		fmt.Println("No recipes found for suppliers")
+		os.Exit(1)
+	}
 
 	rc := len(r)
 	if rc == 1 {
