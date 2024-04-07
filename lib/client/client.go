@@ -199,16 +199,19 @@ func (b *ClientAuthBrowserDriver) stepOauth2Setup(step parser.Step) utils.StepRe
 }
 
 func (b *ClientAuthBrowserDriver) stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials, buchhalterConfigDirectory string) utils.StepResult {
+	b.logger.Info("Checking OAuth2 tokens ...")
 	// Try to get secrets from cache
 	pii := recipe.Provider + "|" + credentials.Id
 	tokens, err := secrets.GetOauthAccessTokenFromCache(pii, buchhalterConfigDirectory)
 
 	if err != nil {
 		if b.validOauth2AuthToken(tokens) {
+			b.logger.Info("Found valid oauth2 access token in cache")
 			b.oauth2AuthToken = tokens.AccessToken
 			return utils.StepResult{Status: "success", Message: "Found valid oauth2 access token in cache"}
 
 		} else {
+			b.logger.Info("No valid oauth2 access token found in cache. Trying to get one with refresh token")
 			payload := []byte(`{
 "grant_type": "refresh_token",
 "client_id": "` + b.oauth2ClientId + `",
@@ -218,6 +221,7 @@ func (b *ClientAuthBrowserDriver) stepOauth2CheckTokens(ctx context.Context, rec
 			nt, err := b.getOauth2Tokens(ctx, payload, pii, buchhalterConfigDirectory)
 			if err == nil {
 				b.oauth2AuthToken = nt.AccessToken
+				b.logger.Error("Error getting oauth2 access token with refresh token")
 				return utils.StepResult{Status: "error", Message: "Error getting oauth2 access token with refresh token", Break: true}
 			}
 		}
@@ -227,6 +231,7 @@ func (b *ClientAuthBrowserDriver) stepOauth2CheckTokens(ctx context.Context, rec
 }
 
 func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials, buchhalterConfigDirectory string) utils.StepResult {
+	b.logger.Info("Authenticating with OAuth2 ...")
 	if len(b.oauth2AuthToken) > 0 {
 		return utils.StepResult{Status: "success"}
 	}
@@ -253,6 +258,9 @@ func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, re
 	b.listenForNetworkEvent(ctx)
 	err = chromedp.Run(ctx,
 		b.run(5*time.Second, chromedp.Navigate(loginUrl)),
+		chromedp.WaitReady(`#form-input-identity`, chromedp.ByID),
+		chromedp.Sleep(1*time.Second),
+		chromedp.Click(`#form-input-identity`, chromedp.ByID),
 		chromedp.SendKeys("#form-input-identity", credentials.Username, chromedp.ByID),
 		chromedp.Sleep(1*time.Second),
 		chromedp.Click("#form-submit-continue", chromedp.ByID),
