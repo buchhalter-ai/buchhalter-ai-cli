@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"log/slog"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -33,6 +34,7 @@ var (
 )
 
 type BrowserDriver struct {
+	logger          *slog.Logger
 	credentials     *vault.Credentials
 	documentArchive *archive.DocumentArchive
 
@@ -49,8 +51,9 @@ type BrowserDriver struct {
 	newFilesCount int
 }
 
-func NewBrowserDriver(credentials *vault.Credentials, buchhalterDirectory string, documentArchive *archive.DocumentArchive) *BrowserDriver {
+func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterDirectory string, documentArchive *archive.DocumentArchive) *BrowserDriver {
 	return &BrowserDriver{
+		logger:          logger,
 		credentials:     credentials,
 		documentArchive: documentArchive,
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,6 +39,7 @@ type HiddenInputFields struct {
 }
 
 type ClientAuthBrowserDriver struct {
+	logger          *slog.Logger
 	credentials     *vault.Credentials
 	documentArchive *archive.DocumentArchive
 
@@ -63,8 +65,9 @@ type ClientAuthBrowserDriver struct {
 	oauth2PkceVerifierLength int
 }
 
-func NewClientAuthBrowserDriver(credentials *vault.Credentials, buchhalterConfigDirectory, buchhalterDirectory string, documentArchive *archive.DocumentArchive) *ClientAuthBrowserDriver {
+func NewClientAuthBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterConfigDirectory, buchhalterDirectory string, documentArchive *archive.DocumentArchive) *ClientAuthBrowserDriver {
 	return &ClientAuthBrowserDriver{
+		logger:          logger,
 		credentials:     credentials,
 		documentArchive: documentArchive,
 

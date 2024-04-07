@@ -193,7 +193,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 		logger.Info("Downloading invoices ...", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type)
 		switch r[i].recipe.Type {
 		case "browser":
-			browserDriver := browser.NewBrowserDriver(recipeCredentials, buchhalterDirectory, documentArchive)
+			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDirectory, documentArchive)
 			recipeResult = browserDriver.RunRecipe(p, tsc, scs, bcs, r[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = browserDriver.ChromeVersion
@@ -205,7 +205,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 				fmt.Println(err)
 			}
 		case "client":
-			browserDriver := client.NewClientAuthBrowserDriver(recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
+			browserDriver := client.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
 			recipeResult = browserDriver.RunRecipe(p, tsc, scs, bcs, r[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = browserDriver.ChromeVersion
