@@ -83,6 +83,13 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 	recipeParser := parser.NewRecipeParser(logger, buchhalterConfigDirectory, buchhalterDirectory)
 
+	localOICDBChecksum, err := recipeParser.GetChecksumOfLocalOICDB()
+	if err != nil {
+		logger.Error("Error calculating checksum of local Open Invoice Collector Database", "error", err)
+		fmt.Printf("Error calculating checksum of local Open Invoice Collector Database: %s\n", err)
+		os.Exit(1)
+	}
+
 	repositoryUrl := viper.GetString("buchhalter_repository_url")
 	metricsUrl := viper.GetString("buchhalter_metrics_url")
 	buchhalterAPIClient := repository.NewBuchhalterAPIClient(logger, buchhalterConfigDirectory, repositoryUrl, metricsUrl, CliVersion)
@@ -108,7 +115,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
 
 	// Run recipes
-	go runRecipes(p, logger, provider, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
+	go runRecipes(p, logger, provider, localOICDBChecksum, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
 
 	if _, err := p.Run(); err != nil {
 		logger.Error("Error running program", "error", err)
@@ -117,7 +124,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 }
 
-func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
+func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksum string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
 	t := "Build archive index"
 	p.Send(resultStatusUpdate{title: t})
 
@@ -134,10 +141,8 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 		t = "Checking for repository updates"
 		p.Send(resultStatusUpdate{title: t})
 
-		// TODO Where do we get this from?
-		currentChecksum := viper.GetString("buchhalter_repository_checksum")
-		logger.Info("Checking for OICDB repository updates ...", "local_checksum", currentChecksum)
-		err := buchhalterAPIClient.UpdateIfAvailable(currentChecksum)
+		logger.Info("Checking for OICDB repository updates ...", "local_checksum", localOICDBChecksum)
+		err := buchhalterAPIClient.UpdateIfAvailable(localOICDBChecksum)
 		if err != nil {
 			logger.Error("Error checking for OICDB repository updates", "error", err)
 			fmt.Println(err)
