@@ -85,7 +85,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 
 	repositoryUrl := viper.GetString("buchhalter_repository_url")
 	metricsUrl := viper.GetString("buchhalter_metrics_url")
-	buchhalterAPIClient := repository.NewBuchhalterAPIClient(buchhalterConfigDirectory, repositoryUrl, metricsUrl, CliVersion)
+	buchhalterAPIClient := repository.NewBuchhalterAPIClient(logger, buchhalterConfigDirectory, repositoryUrl, metricsUrl, CliVersion)
 
 	viewModel := initialModel(logger, vaultProvider, buchhalterAPIClient, recipeParser)
 	p := tea.NewProgram(viewModel)
