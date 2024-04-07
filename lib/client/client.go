@@ -209,7 +209,6 @@ func (b *ClientAuthBrowserDriver) stepOauth2CheckTokens(ctx context.Context, rec
 			b.logger.Info("Found valid oauth2 access token in cache")
 			b.oauth2AuthToken = tokens.AccessToken
 			return utils.StepResult{Status: "success", Message: "Found valid oauth2 access token in cache"}
-
 		} else {
 			b.logger.Info("No valid oauth2 access token found in cache. Trying to get one with refresh token")
 			payload := []byte(`{
@@ -271,6 +270,11 @@ func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, re
 		chromedp.Sleep(2*time.Second),
 	)
 
+	if err != nil {
+		b.logger.Error("Error while logging in", "error", err.Error())
+		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
+	}
+	
 	/** Check for 2FA authentication */
 	var faNodes []*cdp.Node
 	err = chromedp.Run(ctx,
