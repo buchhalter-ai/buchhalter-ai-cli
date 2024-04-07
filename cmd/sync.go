@@ -129,8 +129,9 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 		fmt.Println(err)
 	}
 
+	developmentMode := viper.GetBool("dev")
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
-	if !viper.GetBool("dev") {
+	if !developmentMode {
 		t = "Checking for repository updates"
 		p.Send(resultStatusUpdate{title: t})
 
@@ -218,8 +219,9 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 		bcs += scs
 	}
 
-	if viper.GetBool("buchhalter_always_send_metrics") {
-		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", viper.GetBool("buchhalter_always_send_metrics"))
+	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")
+	if !developmentMode && alwaysSendMetrics {
+		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)
 		err = buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
 		if err != nil {
 			// TODO Implement better error handling
@@ -230,7 +232,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 		logger.Info("Initializing shutdown")
 		p.Send(quitMsg{})
 
-	} else if viper.GetBool("dev") {
+	} else if developmentMode {
 		logger.Info("Initializing shutdown")
 		p.Send(quitMsg{})
 
@@ -244,9 +246,9 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider string, vaultProvi
 }
 
 func prepareRecipes(logger *slog.Logger, provider string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) []recipeToExecute {
-	devMode := viper.GetBool("dev")
-	logger.Info("Loading recipes for suppliers ...", "development_mode", devMode)
-	loadRecipeResult, err := recipeParser.LoadRecipes(devMode)
+	developmentMode := viper.GetBool("dev")
+	logger.Info("Loading recipes for suppliers ...", "development_mode", developmentMode)
+	loadRecipeResult, err := recipeParser.LoadRecipes(developmentMode)
 	if err != nil {
 		// TODO Implement better error handling
 		logger.Error("Error loading recipes for suppliers", "error", err)
