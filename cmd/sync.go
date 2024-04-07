@@ -66,7 +66,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	defer logger.Info("Shutting down")
 
 	// Init document archive
-	documentArchive := archive.NewDocumentArchive(buchhalterDirectory)
+	documentArchive := archive.NewDocumentArchive(logger, buchhalterDirectory)
 
 	// Init vault provider
 	vaultConfigBinary := viper.GetString("credential_provider_cli_command")
