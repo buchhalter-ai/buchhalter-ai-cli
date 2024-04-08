@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chromedp/cdproto/cdp"
 	"io"
 	"log"
 	"log/slog"
@@ -17,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/chromedp/cdproto/cdp"
 
 	"buchhalter/lib/archive"
 	"buchhalter/lib/parser"
@@ -274,7 +275,7 @@ func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, re
 		b.logger.Error("Error while logging in", "error", err.Error())
 		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
 	}
-	
+
 	/** Check for 2FA authentication */
 	var faNodes []*cdp.Node
 	err = chromedp.Run(ctx,
