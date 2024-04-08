@@ -65,8 +65,7 @@ func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchh
 }
 
 func (b *BrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe) utils.RecipeResult {
-	// New creates a new context for use with chromedp. With this context
-	// you can use chromedp as you normally would.
+	// Init browser
 	b.logger.Info("Starting chrome browser driver ...", "recipe", recipe.Provider, "recipe_version", recipe.Version)
 	ctx, cancel, err := cu.New(cu.NewConfig(
 		cu.WithContext(b.browserCtx),
@@ -157,7 +156,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, rec
 				sr <- b.stepRunScriptDownloadUrls(ctx, step)
 			}
 		}()
-		//=========
+
 		select {
 		case lsr := <-sr:
 			newDocumentsText := strconv.Itoa(b.newFilesCount) + " new documents"
