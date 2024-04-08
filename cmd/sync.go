@@ -174,7 +174,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 
 	totalStepCount := 0
-	scs := 0 //count steps current recipe
+	stepCountInCurrentRecipe := 0
 	baseCountStep := 0
 	var recipeResult utils.RecipeResult
 	for i := range recipesToExecute {
@@ -182,7 +182,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	}
 	for i := range recipesToExecute {
 		s := time.Now()
-		scs = len(recipesToExecute[i].recipe.Steps)
+		stepCountInCurrentRecipe = len(recipesToExecute[i].recipe.Steps)
 		p.Send(resultStatusUpdate{title: "Downloading invoices from " + recipesToExecute[i].recipe.Provider + ":", hasError: false})
 
 		// Load username, password, totp from vault
@@ -199,7 +199,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		switch recipesToExecute[i].recipe.Type {
 		case "browser":
 			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDirectory, documentArchive)
-			recipeResult = browserDriver.RunRecipe(p, totalStepCount, scs, baseCountStep, recipesToExecute[i].recipe)
+			recipeResult = browserDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = browserDriver.ChromeVersion
 			}
@@ -211,7 +211,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			}
 		case "client":
 			clientDriver := client.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
-			recipeResult = clientDriver.RunRecipe(p, totalStepCount, scs, baseCountStep, recipesToExecute[i].recipe)
+			recipeResult = clientDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = clientDriver.ChromeVersion
 			}
@@ -235,7 +235,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		p.Send(resultMsg{duration: time.Since(s), newFilesCount: recipeResult.NewFilesCount, step: recipeResult.StatusTextFormatted, errorMessage: recipeResult.LastErrorMessage})
 		logger.Info("Downloading invoices ... completed", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type, "duration", time.Since(s), "new_files", recipeResult.NewFilesCount)
 
-		baseCountStep += scs
+		baseCountStep += stepCountInCurrentRecipe
 	}
 
 	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")
