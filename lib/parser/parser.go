@@ -171,7 +171,7 @@ func (p *RecipeParser) loadLocalRecipes(buchhalterDirectory string) error {
 	sf := "_local/recipes"
 	recipesDir := filepath.Join(buchhalterDirectory, sf)
 	if _, err := os.Stat(recipesDir); os.IsNotExist(err) {
-		err := os.Mkdir(recipesDir, 0755)
+		err := os.MkdirAll(recipesDir, 0755)
 		if err != nil {
 			return err
 		}
