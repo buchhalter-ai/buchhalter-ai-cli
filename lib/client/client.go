@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/chromedp/cdproto/cdp"
 
 	"buchhalter/lib/archive"
 	"buchhalter/lib/parser"
@@ -30,11 +33,30 @@ import (
 )
 
 var (
-	downloadsDirectory       string
-	documentsDirectory       string
-	recipeTimeout            = 120 * time.Second
-	textStyleBold            = lipgloss.NewStyle().Bold(true).Render
-	browserCtx               context.Context
+	textStyleBold = lipgloss.NewStyle().Bold(true).Render
+)
+
+type HiddenInputFields struct {
+	Fields map[string]string
+}
+
+type ClientAuthBrowserDriver struct {
+	logger          *slog.Logger
+	credentials     *vault.Credentials
+	documentArchive *archive.DocumentArchive
+
+	buchhalterConfigDirectory string
+	buchhalterDirectory       string
+
+	ChromeVersion string
+
+	downloadsDirectory string
+	documentsDirectory string
+
+	recipeTimeout time.Duration
+	browserCtx    context.Context
+	newFilesCount int
+
 	oauth2AuthToken          string
 	oauth2AuthUrl            string
 	oauth2TokenUrl           string
@@ -43,18 +65,27 @@ var (
 	oauth2Scope              string
 	oauth2PkceMethod         string
 	oauth2PkceVerifierLength int
-	ChromeVersion            string
-	newFilesCount            = 0
-)
-
-type HiddenInputFields struct {
-	Fields map[string]string
 }
 
-func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe, credentials *vault.Credentials, buchhalterConfigDirectory, buchhalterDirectory string, documentArchive *archive.DocumentArchive) utils.RecipeResult {
+func NewClientAuthBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterConfigDirectory, buchhalterDirectory string, documentArchive *archive.DocumentArchive) *ClientAuthBrowserDriver {
+	return &ClientAuthBrowserDriver{
+		logger:          logger,
+		credentials:     credentials,
+		documentArchive: documentArchive,
+
+		buchhalterConfigDirectory: buchhalterConfigDirectory,
+		buchhalterDirectory:       buchhalterDirectory,
+
+		recipeTimeout: 120 * time.Second,
+		browserCtx:    context.Background(),
+		newFilesCount: 0,
+	}
+}
+
+func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe) utils.RecipeResult {
 	// Init directories
 	var err error
-	downloadsDirectory, documentsDirectory, err = utils.InitProviderDirectories(buchhalterDirectory, recipe.Provider)
+	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDirectory, recipe.Provider)
 	if err != nil {
 		// TODO Implement error handling
 		fmt.Println(err)
@@ -62,7 +93,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 
 	// Init browser
 	ctx, cancel, err := cu.New(cu.NewConfig(
-		cu.WithContext(browserCtx),
+		cu.WithContext(b.browserCtx),
 	))
 
 	if err != nil {
@@ -72,16 +103,16 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 	defer cancel()
 
 	// get chrome version for metrics
-	if ChromeVersion == "" {
+	if b.ChromeVersion == "" {
 		err := chromedp.Run(ctx, chromedp.Tasks{
 			chromedp.Navigate("chrome://version"),
-			chromedp.Text(`#version`, &ChromeVersion, chromedp.NodeVisible),
+			chromedp.Text(`#version`, &b.ChromeVersion, chromedp.NodeVisible),
 		})
 		if err != nil {
 			// TODO Implement error handling
 			log.Fatal(err)
 		}
-		ChromeVersion = strings.TrimSpace(ChromeVersion)
+		b.ChromeVersion = strings.TrimSpace(b.ChromeVersion)
 	}
 
 	var cs float64
@@ -94,23 +125,23 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 		go func() {
 			switch step.Action {
 			case "oauth2-setup":
-				sr <- stepOauth2Setup(step)
+				sr <- b.stepOauth2Setup(step)
 			case "oauth2-check-tokens":
-				sr <- stepOauth2CheckTokens(ctx, recipe, step, credentials, buchhalterConfigDirectory)
+				sr <- b.stepOauth2CheckTokens(ctx, recipe, step, b.credentials, b.buchhalterConfigDirectory)
 			case "oauth2-authenticate":
-				sr <- stepOauth2Authenticate(ctx, recipe, step, credentials, buchhalterConfigDirectory)
+				sr <- b.stepOauth2Authenticate(ctx, recipe, step, b.credentials, b.buchhalterConfigDirectory)
 			case "oauth2-post-and-get-items":
-				sr <- stepOauth2PostAndGetItems(ctx, step, documentArchive)
+				sr <- b.stepOauth2PostAndGetItems(ctx, step, b.documentArchive)
 			}
 		}()
 
 		select {
 		case lsr := <-sr:
-			newDocumentsText := strconv.Itoa(newFilesCount) + " new documents"
-			if newFilesCount == 1 {
+			newDocumentsText := strconv.Itoa(b.newFilesCount) + " new documents"
+			if b.newFilesCount == 1 {
 				newDocumentsText = "One new document"
 			}
-			if newFilesCount == 0 {
+			if b.newFilesCount == 0 {
 				newDocumentsText = "No new documents"
 			}
 			if lsr.Status == "success" {
@@ -120,7 +151,7 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 					StatusTextFormatted: "- " + textStyleBold(recipe.Provider) + ": " + newDocumentsText,
 					LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
 					LastStepDescription: step.Description,
-					NewFilesCount:       newFilesCount,
+					NewFilesCount:       b.newFilesCount,
 				}
 			} else {
 				result = utils.RecipeResult{
@@ -130,21 +161,21 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 					LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
 					LastStepDescription: step.Description,
 					LastErrorMessage:    lsr.Message,
-					NewFilesCount:       newFilesCount,
+					NewFilesCount:       b.newFilesCount,
 				}
 				if lsr.Break {
 					return result
 				}
 			}
 
-		case <-time.After(recipeTimeout):
+		case <-time.After(b.recipeTimeout):
 			result = utils.RecipeResult{
 				Status:              "error",
 				StatusText:          recipe.Provider + " aborted with timeout.",
 				StatusTextFormatted: "x " + textStyleBold(recipe.Provider) + " aborted with timeout.",
 				LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
 				LastStepDescription: step.Description,
-				NewFilesCount:       newFilesCount,
+				NewFilesCount:       b.newFilesCount,
 			}
 			return result
 		}
@@ -157,38 +188,40 @@ func RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe,
 	return result
 }
 
-func stepOauth2Setup(step parser.Step) utils.StepResult {
-	oauth2AuthUrl = step.Oauth2.AuthUrl
-	oauth2TokenUrl = step.Oauth2.TokenUrl
-	oauth2RedirectUrl = step.Oauth2.RedirectUrl
-	oauth2ClientId = step.Oauth2.ClientId
-	oauth2Scope = step.Oauth2.Scope
-	oauth2PkceMethod = step.Oauth2.PkceMethod
-	oauth2PkceVerifierLength = step.Oauth2.PkceVerifierLength
+func (b *ClientAuthBrowserDriver) stepOauth2Setup(step parser.Step) utils.StepResult {
+	b.oauth2AuthUrl = step.Oauth2.AuthUrl
+	b.oauth2TokenUrl = step.Oauth2.TokenUrl
+	b.oauth2RedirectUrl = step.Oauth2.RedirectUrl
+	b.oauth2ClientId = step.Oauth2.ClientId
+	b.oauth2Scope = step.Oauth2.Scope
+	b.oauth2PkceMethod = step.Oauth2.PkceMethod
+	b.oauth2PkceVerifierLength = step.Oauth2.PkceVerifierLength
 
 	return utils.StepResult{Status: "success", Message: "Successfully set up OAuth2 settings."}
 }
 
-func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials, buchhalterConfigDirectory string) utils.StepResult {
+func (b *ClientAuthBrowserDriver) stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials, buchhalterConfigDirectory string) utils.StepResult {
+	b.logger.Info("Checking OAuth2 tokens ...")
 	// Try to get secrets from cache
 	pii := recipe.Provider + "|" + credentials.Id
 	tokens, err := secrets.GetOauthAccessTokenFromCache(pii, buchhalterConfigDirectory)
-
-	if err != nil {
-		if validOauth2AuthToken(tokens) {
-			oauth2AuthToken = tokens.AccessToken
+	if err == nil {
+		if b.validOauth2AuthToken(tokens) {
+			b.logger.Info("Found valid oauth2 access token in cache")
+			b.oauth2AuthToken = tokens.AccessToken
 			return utils.StepResult{Status: "success", Message: "Found valid oauth2 access token in cache"}
-
 		} else {
+			b.logger.Info("No valid oauth2 access token found in cache. Trying to get one with refresh token")
 			payload := []byte(`{
 "grant_type": "refresh_token",
-"client_id": "` + oauth2ClientId + `",
+"client_id": "` + b.oauth2ClientId + `",
 "refresh_token": "` + tokens.RefreshToken + `",
-"scope": "` + oauth2Scope + `"
+"scope": "` + b.oauth2Scope + `"
 }`)
-			nt, err := getOauth2Tokens(ctx, payload, pii, buchhalterConfigDirectory)
+			nt, err := b.getOauth2Tokens(ctx, payload, pii, buchhalterConfigDirectory)
 			if err == nil {
-				oauth2AuthToken = nt.AccessToken
+				b.oauth2AuthToken = nt.AccessToken
+				b.logger.Error("Error getting oauth2 access token with refresh token")
 				return utils.StepResult{Status: "error", Message: "Error getting oauth2 access token with refresh token", Break: true}
 			}
 		}
@@ -197,12 +230,13 @@ func stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step pars
 	return utils.StepResult{Status: "error", Message: "No access token found. New OAuth2 login needed."}
 }
 
-func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials, buchhalterConfigDirectory string) utils.StepResult {
-	if len(oauth2AuthToken) > 0 {
+func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials, buchhalterConfigDirectory string) utils.StepResult {
+	b.logger.Info("Authenticating with OAuth2 ...")
+	if len(b.oauth2AuthToken) > 0 {
 		return utils.StepResult{Status: "success"}
 	}
 
-	verifier, challenge, err := utils.Oauth2Pkce(oauth2PkceVerifierLength)
+	verifier, challenge, err := utils.Oauth2Pkce(b.oauth2PkceVerifierLength)
 	if err != nil {
 		// TODO implement error handling
 		fmt.Println(err)
@@ -210,20 +244,22 @@ func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step par
 
 	state := utils.RandomString(20)
 	params := url.Values{}
-	params.Add("client_id", oauth2ClientId)
+	params.Add("client_id", b.oauth2ClientId)
 	params.Add("prompt", "login")
-	params.Add("redirect_uri", oauth2RedirectUrl)
-	params.Add("scope", oauth2Scope)
+	params.Add("redirect_uri", b.oauth2RedirectUrl)
+	params.Add("scope", b.oauth2Scope)
 	params.Add("response_type", "code")
 	params.Add("state", state)
 	params.Add("code_challenge", challenge)
-	params.Add("code_challenge_method", oauth2PkceMethod)
-	loginUrl := oauth2AuthUrl + "?" + params.Encode()
+	params.Add("code_challenge_method", b.oauth2PkceMethod)
+	loginUrl := b.oauth2AuthUrl + "?" + params.Encode()
 
-	var u string
-	listenForNetworkEvent(ctx)
+	b.listenForNetworkEvent(ctx)
 	err = chromedp.Run(ctx,
-		run(5*time.Second, chromedp.Navigate(loginUrl)),
+		b.run(5*time.Second, chromedp.Navigate(loginUrl)),
+		chromedp.WaitReady(`#form-input-identity`, chromedp.ByID),
+		chromedp.Sleep(1*time.Second),
+		chromedp.Click(`#form-input-identity`, chromedp.ByID),
 		chromedp.SendKeys("#form-input-identity", credentials.Username, chromedp.ByID),
 		chromedp.Sleep(1*time.Second),
 		chromedp.Click("#form-submit-continue", chromedp.ByID),
@@ -232,10 +268,48 @@ func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step par
 		chromedp.SendKeys("#form-input-credential", credentials.Password, chromedp.ByID),
 		chromedp.Sleep(2*time.Second),
 		chromedp.Click("#form-submit-continue", chromedp.ByID),
-		chromedp.Sleep(5*time.Second),
+		chromedp.Sleep(2*time.Second),
+	)
+
+	if err != nil {
+		b.logger.Error("Error while logging in", "error", err.Error())
+		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
+	}
+
+	/** Check for 2FA authentication */
+	var faNodes []*cdp.Node
+	err = chromedp.Run(ctx,
+		b.run(5*time.Second, chromedp.WaitVisible(`#form-input-passcode`, chromedp.ByID)),
+		chromedp.Nodes("#form-input-passcode", &faNodes, chromedp.AtLeast(0)),
+	)
+
+	if err != nil {
+		b.logger.Error("Error while logging in", "error", err.Error())
+		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
+	}
+
+	/** Insert 2FA code */
+	if len(faNodes) > 0 {
+		err = chromedp.Run(ctx,
+			chromedp.SendKeys("#form-input-passcode", credentials.Totp, chromedp.ByID),
+			chromedp.Click("#form-submit", chromedp.ByID),
+		)
+	}
+
+	if err != nil {
+		b.logger.Error("Error while logging in", "error", err.Error())
+		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
+	}
+
+	/** Request access token */
+	var u string
+	err = chromedp.Run(ctx,
+		chromedp.Sleep(2*time.Second),
 		chromedp.Location(&u),
 	)
+
 	if err != nil {
+		b.logger.Error("Error while requesting access token", "error", err.Error())
 		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
 	}
 
@@ -245,23 +319,24 @@ func stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step par
 
 	payload := []byte(`{
 "grant_type": "authorization_code",
-"client_id": "` + oauth2ClientId + `",
+"client_id": "` + b.oauth2ClientId + `",
 "code_verifier": "` + verifier + `",
 "code": "` + code + `",
-"redirect_uri": "` + oauth2RedirectUrl + `"
+"redirect_uri": "` + b.oauth2RedirectUrl + `"
 }`)
 
 	pii := recipe.Provider + "|" + credentials.Id
-	tokens, err := getOauth2Tokens(ctx, payload, pii, buchhalterConfigDirectory)
+	tokens, err := b.getOauth2Tokens(ctx, payload, pii, buchhalterConfigDirectory)
 	if err != nil {
+		b.logger.Error("Error while getting fresh OAuth2 access token", "error", err.Error())
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
-
-	oauth2AuthToken = tokens.AccessToken
+	b.logger.Info("Successfully retrieved new OAuth2 access tokens.")
+	b.oauth2AuthToken = tokens.AccessToken
 	return utils.StepResult{Status: "success", Message: "Successfully retrieved OAuth2 tokens."}
 }
 
-func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step, documentArchive *archive.DocumentArchive) utils.StepResult {
+func (b *ClientAuthBrowserDriver) stepOauth2PostAndGetItems(ctx context.Context, step parser.Step, documentArchive *archive.DocumentArchive) utils.StepResult {
 	payload := []byte(step.Body)
 	req, err := http.NewRequestWithContext(ctx, "POST", step.URL, bytes.NewBuffer(payload))
 	if err != nil {
@@ -272,7 +347,7 @@ func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step, documentAr
 	req.Header.Set("Content-Type", "application/json")
 	for n, h := range step.Headers {
 		if n == "Authorization" {
-			h = strings.Replace(h, "{{ token }}", oauth2AuthToken, -1)
+			h = strings.Replace(h, "{{ token }}", b.oauth2AuthToken, -1)
 		}
 		req.Header.Set(n, h)
 	}
@@ -290,7 +365,7 @@ func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step, documentAr
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
-		newFilesCount = 0
+		b.newFilesCount = 0
 		var jsr interface{}
 		err := json.Unmarshal(body, &jsr)
 		if err != nil {
@@ -316,14 +391,14 @@ func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step, documentAr
 			url := step.DocumentUrl
 			url = strings.Replace(url, "{{ id }}", id, -1)
 			if len(filenames) > 0 {
-				f = filepath.Join(downloadsDirectory, filenames[n])
+				f = filepath.Join(b.downloadsDirectory, filenames[n])
 				filename = filenames[n]
 			} else {
-				f = filepath.Join(downloadsDirectory, id, ".pdf")
+				f = filepath.Join(b.downloadsDirectory, id, ".pdf")
 				filename = filepath.Join(id, ".pdf")
 
 			}
-			downloadSuccessful, err := doRequest(ctx, url, step.DocumentRequestMethod, step.DocumentRequestHeaders, f, nil)
+			downloadSuccessful, err := b.doRequest(ctx, url, step.DocumentRequestMethod, step.DocumentRequestHeaders, f, nil)
 			if err != nil {
 				// TODO implement error handling
 				fmt.Println(err)
@@ -332,8 +407,8 @@ func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step, documentAr
 				return utils.StepResult{Status: "error", Message: "Error while downloading invoices"}
 			}
 			if !documentArchive.FileExists(f) {
-				newFilesCount++
-				_, err := utils.CopyFile(f, filepath.Join(documentsDirectory, filename))
+				b.newFilesCount++
+				_, err := utils.CopyFile(f, filepath.Join(b.documentsDirectory, filename))
 				if err != nil {
 					return utils.StepResult{Status: "error", Message: "Error while copying file: " + err.Error()}
 				}
@@ -349,7 +424,7 @@ func stepOauth2PostAndGetItems(ctx context.Context, step parser.Step, documentAr
 	return utils.StepResult{Status: "error"}
 }
 
-func doRequest(ctx context.Context, url string, method string, headers map[string]string, filename string, payload []byte) (bool, error) {
+func (b *ClientAuthBrowserDriver) doRequest(ctx context.Context, url string, method string, headers map[string]string, filename string, payload []byte) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(payload))
 	if err != nil {
 		return false, err
@@ -359,7 +434,7 @@ func doRequest(ctx context.Context, url string, method string, headers map[strin
 	req.Header.Set("Content-Type", "application/json")
 	for n, h := range headers {
 		if n == "Authorization" {
-			h = strings.Replace(h, "{{ token }}", oauth2AuthToken, -1)
+			h = strings.Replace(h, "{{ token }}", b.oauth2AuthToken, -1)
 		}
 		req.Header.Set(n, h)
 	}
@@ -384,9 +459,9 @@ func doRequest(ctx context.Context, url string, method string, headers map[strin
 	return false, nil
 }
 
-func getOauth2Tokens(ctx context.Context, payload []byte, pii, buchhalterConfigDirectory string) (secrets.Oauth2Tokens, error) {
+func (b *ClientAuthBrowserDriver) getOauth2Tokens(ctx context.Context, payload []byte, pii, buchhalterConfigDirectory string) (secrets.Oauth2Tokens, error) {
 	var tj secrets.Oauth2Tokens
-	req, err := http.NewRequestWithContext(ctx, "POST", oauth2TokenUrl, bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(ctx, "POST", b.oauth2TokenUrl, bytes.NewBuffer(payload))
 	if err != nil {
 		return tj, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -422,17 +497,17 @@ func getOauth2Tokens(ctx context.Context, payload []byte, pii, buchhalterConfigD
 	return tj, errors.New("unknown error getting oauth2 token")
 }
 
-func validOauth2AuthToken(tokens secrets.Oauth2Tokens) bool {
+func (b *ClientAuthBrowserDriver) validOauth2AuthToken(tokens secrets.Oauth2Tokens) bool {
 	n := int(time.Now().Unix())
 	vu := tokens.CreatedAt + tokens.ExpiresIn
 	return vu > n
 }
 
-func run(timeout time.Duration, task chromedp.Action) chromedp.ActionFunc {
-	return runFunc(timeout, task.Do)
+func (b *ClientAuthBrowserDriver) run(timeout time.Duration, task chromedp.Action) chromedp.ActionFunc {
+	return b.runFunc(timeout, task.Do)
 }
 
-func runFunc(timeout time.Duration, task chromedp.ActionFunc) chromedp.ActionFunc {
+func (b *ClientAuthBrowserDriver) runFunc(timeout time.Duration, task chromedp.ActionFunc) chromedp.ActionFunc {
 	return func(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -441,7 +516,7 @@ func runFunc(timeout time.Duration, task chromedp.ActionFunc) chromedp.ActionFun
 	}
 }
 
-func listenForNetworkEvent(ctx context.Context) {
+func (b *ClientAuthBrowserDriver) listenForNetworkEvent(ctx context.Context) {
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		switch ev := ev.(type) {
 
@@ -506,9 +581,9 @@ func extractJsonRecursive(data interface{}, keys []string) []string {
 	return results
 }
 
-func Quit() error {
-	if browserCtx != nil {
-		return chromedp.Cancel(browserCtx)
+func (b *ClientAuthBrowserDriver) Quit() error {
+	if b.browserCtx != nil {
+		return chromedp.Cancel(b.browserCtx)
 	}
 
 	return nil
