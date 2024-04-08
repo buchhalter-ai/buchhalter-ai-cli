@@ -181,7 +181,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		totalStepCount += len(recipesToExecute[i].recipe.Steps)
 	}
 	for i := range recipesToExecute {
-		s := time.Now()
+		startTime := time.Now()
 		stepCountInCurrentRecipe = len(recipesToExecute[i].recipe.Steps)
 		p.Send(resultStatusUpdate{title: "Downloading invoices from " + recipesToExecute[i].recipe.Provider + ":", hasError: false})
 
@@ -227,13 +227,13 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			Version:          recipesToExecute[i].recipe.Version,
 			Status:           recipeResult.StatusText,
 			LastErrorMessage: recipeResult.LastErrorMessage,
-			Duration:         time.Since(s).Seconds(),
+			Duration:         time.Since(startTime).Seconds(),
 			NewFilesCount:    recipeResult.NewFilesCount,
 		}
 		RunData = append(RunData, rdx)
 		// TODO Check for recipeResult.LastErrorMessage
-		p.Send(resultMsg{duration: time.Since(s), newFilesCount: recipeResult.NewFilesCount, step: recipeResult.StatusTextFormatted, errorMessage: recipeResult.LastErrorMessage})
-		logger.Info("Downloading invoices ... completed", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type, "duration", time.Since(s), "new_files", recipeResult.NewFilesCount)
+		p.Send(resultMsg{duration: time.Since(startTime), newFilesCount: recipeResult.NewFilesCount, step: recipeResult.StatusTextFormatted, errorMessage: recipeResult.LastErrorMessage})
+		logger.Info("Downloading invoices ... completed", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type, "duration", time.Since(startTime), "new_files", recipeResult.NewFilesCount)
 
 		baseCountStep += stepCountInCurrentRecipe
 	}
