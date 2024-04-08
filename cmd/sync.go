@@ -173,12 +173,12 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	buchhalterDirectory := viper.GetString("buchhalter_directory")
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 
-	tsc := 0 //total steps count
+	totalStepCount := 0
 	scs := 0 //count steps current recipe
 	bcs := 0 //base count steps
 	var recipeResult utils.RecipeResult
 	for i := range recipesToExecute {
-		tsc += len(recipesToExecute[i].recipe.Steps)
+		totalStepCount += len(recipesToExecute[i].recipe.Steps)
 	}
 	for i := range recipesToExecute {
 		s := time.Now()
@@ -199,7 +199,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		switch recipesToExecute[i].recipe.Type {
 		case "browser":
 			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDirectory, documentArchive)
-			recipeResult = browserDriver.RunRecipe(p, tsc, scs, bcs, recipesToExecute[i].recipe)
+			recipeResult = browserDriver.RunRecipe(p, totalStepCount, scs, bcs, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = browserDriver.ChromeVersion
 			}
@@ -211,7 +211,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			}
 		case "client":
 			clientDriver := client.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
-			recipeResult = clientDriver.RunRecipe(p, tsc, scs, bcs, recipesToExecute[i].recipe)
+			recipeResult = clientDriver.RunRecipe(p, totalStepCount, scs, bcs, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = clientDriver.ChromeVersion
 			}
