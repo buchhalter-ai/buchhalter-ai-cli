@@ -134,8 +134,17 @@ func initConfig() {
 	}
 }
 
-func initializeLogger(logSetting bool, buchhalterDir string) (*slog.Logger, error) {
+func initializeLogger(logSetting, developmentMode bool, buchhalterDir string) (*slog.Logger, error) {
 	var logger *slog.Logger
+
+	// Basic level: Info
+	// We increase the level to Debug if development mode is enabled
+	handlerOptions := &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}
+	if developmentMode {
+		handlerOptions.Level = slog.LevelDebug
+	}
 
 	if logSetting {
 		fileName := filepath.Join(buchhalterDir, "buchhalter-cli.log")
@@ -144,9 +153,9 @@ func initializeLogger(logSetting bool, buchhalterDir string) (*slog.Logger, erro
 			return nil, fmt.Errorf("can't open %s for logging: %+v", fileName, err)
 		}
 		// defer outputWriter.Close()
-		logger = slog.New(slog.NewTextHandler(outputWriter, nil))
+		logger = slog.New(slog.NewTextHandler(outputWriter, handlerOptions))
 	} else {
-		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+		logger = slog.New(slog.NewTextHandler(io.Discard, handlerOptions))
 	}
 
 	return logger, nil

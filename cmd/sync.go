@@ -52,17 +52,18 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 
 	// Init logging
 	buchhalterDirectory := viper.GetString("buchhalter_directory")
+	developmentMode := viper.GetBool("dev")
 	logSetting, err := cmd.Flags().GetBool("log")
 	if err != nil {
 		fmt.Printf("Error reading log flag: %s\n", err)
 		os.Exit(1)
 	}
-	logger, err := initializeLogger(logSetting, buchhalterDirectory)
+	logger, err := initializeLogger(logSetting, developmentMode, buchhalterDirectory)
 	if err != nil {
 		fmt.Printf("Error on initializing logging: %s\n", err)
 		os.Exit(1)
 	}
-	logger.Info("Booting up", "development_mode", viper.GetBool("dev"))
+	logger.Info("Booting up", "development_mode", developmentMode)
 	defer logger.Info("Shutting down")
 
 	// Init document archive
