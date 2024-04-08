@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"log"
 	"log/slog"
 	"path/filepath"
 	"regexp"
@@ -68,6 +67,7 @@ func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchh
 func (b *BrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe) utils.RecipeResult {
 	// New creates a new context for use with chromedp. With this context
 	// you can use chromedp as you normally would.
+	b.logger.Info("Starting chrome browser driver ...", "recipe", recipe.Provider, "recipe_version", recipe.Version)
 	ctx, cancel, err := cu.New(cu.NewConfig(
 		cu.WithContext(b.browserCtx),
 	))
@@ -81,13 +81,6 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, rec
 	ctx, cancel = context.WithTimeout(ctx, 600*time.Second)
 	defer cancel()
 
-	// create download directories
-	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDirectory, recipe.Provider)
-	if err != nil {
-		// TODO Implement error handling
-		fmt.Println(err)
-	}
-
 	// get chrome version for metrics
 	if b.ChromeVersion == "" {
 		err := chromedp.Run(ctx, chromedp.Tasks{
@@ -96,10 +89,19 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, rec
 		})
 		if err != nil {
 			// TODO Implement error handling
-			log.Fatal(err)
+			panic(err)
 		}
 		b.ChromeVersion = strings.TrimSpace(b.ChromeVersion)
 	}
+	b.logger.Info("Starting chrome browser driver ... completed ", "recipe", recipe.Provider, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
+
+	// create download directories
+	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDirectory, recipe.Provider)
+	if err != nil {
+		// TODO Implement error handling
+		fmt.Println(err)
+	}
+	b.logger.Info("Download directories created", "downloads_directory", b.downloadsDirectory, "documents_directory", b.documentsDirectory)
 
 	err = chromedp.Run(ctx, chromedp.Tasks{
 		browser.
@@ -112,10 +114,9 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, rec
 			return nil
 		}),
 	})
-
 	if err != nil {
 		// TODO Implement error handling
-		log.Fatal(err)
+		panic(err)
 	}
 
 	// Disable downloading images for performance reasons
@@ -156,7 +157,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, rec
 				sr <- b.stepRunScriptDownloadUrls(ctx, step)
 			}
 		}()
-
+		//=========
 		select {
 		case lsr := <-sr:
 			newDocumentsText := strconv.Itoa(b.newFilesCount) + " new documents"
@@ -231,6 +232,8 @@ func (b *BrowserDriver) Quit() error {
 }
 
 func (b *BrowserDriver) stepOpen(ctx context.Context, step parser.Step) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "url", step.URL)
+
 	if err := chromedp.Run(ctx,
 		// navigate to the page
 		chromedp.Navigate(step.URL),
@@ -245,6 +248,8 @@ func (b *BrowserDriver) stepOpen(ctx context.Context, step parser.Step) utils.St
 }
 
 func (b *BrowserDriver) stepRemoveElement(ctx context.Context, step parser.Step) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector)
+
 	nodeName := "node" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := chromedp.Run(ctx,
 		chromedp.Evaluate("let "+nodeName+" = document.querySelector('"+step.Selector+"'); "+nodeName+".parentNode.removeChild("+nodeName+")", nil),
@@ -255,6 +260,8 @@ func (b *BrowserDriver) stepRemoveElement(ctx context.Context, step parser.Step)
 }
 
 func (b *BrowserDriver) stepClick(ctx context.Context, step parser.Step) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector)
+
 	if err := chromedp.Run(ctx,
 		chromedp.Click(step.Selector, chromedp.NodeReady),
 	); err != nil {
@@ -264,8 +271,9 @@ func (b *BrowserDriver) stepClick(ctx context.Context, step parser.Step) utils.S
 }
 
 func (b *BrowserDriver) stepType(ctx context.Context, step parser.Step, credentials *vault.Credentials) utils.StepResult {
-	step.Value = b.parseCredentialPlaceholders(step.Value, credentials)
+	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector, "value", step.Value)
 
+	step.Value = b.parseCredentialPlaceholders(step.Value, credentials)
 	if err := chromedp.Run(ctx,
 		chromedp.SendKeys(step.Selector, step.Value, chromedp.NodeReady),
 	); err != nil {
@@ -275,6 +283,8 @@ func (b *BrowserDriver) stepType(ctx context.Context, step parser.Step, credenti
 }
 
 func (b *BrowserDriver) stepSleep(ctx context.Context, step parser.Step) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "length", step.Value)
+
 	seconds, _ := strconv.Atoi(step.Value)
 	if err := chromedp.Run(ctx,
 		chromedp.Sleep(time.Duration(seconds)*time.Second),
@@ -285,6 +295,8 @@ func (b *BrowserDriver) stepSleep(ctx context.Context, step parser.Step) utils.S
 }
 
 func (b *BrowserDriver) stepWaitFor(ctx context.Context, step parser.Step) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector)
+
 	if err := chromedp.Run(ctx,
 		chromedp.WaitReady(step.Selector),
 	); err != nil {
@@ -294,6 +306,8 @@ func (b *BrowserDriver) stepWaitFor(ctx context.Context, step parser.Step) utils
 }
 
 func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector)
+
 	var nodes []*cdp.Node
 	err := chromedp.Run(ctx, chromedp.Tasks{
 		chromedp.WaitReady(step.Selector),
@@ -307,10 +321,10 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 	chromedp.ListenTarget(ctx, func(v interface{}) {
 		switch ev := v.(type) {
 		case *browser.EventDownloadWillBegin:
-			log.Printf("Download will begin: %s - %s\n", ev.GUID, ev.URL)
+			b.logger.Debug("Executing recipe step ... download begins", "action", step.Action, "guid", ev.GUID, "url", ev.URL)
 		case *browser.EventDownloadProgress:
 			if ev.State == browser.DownloadProgressStateCompleted {
-				log.Printf("Download completed: %s\n", ev.GUID)
+				b.logger.Debug("Executing recipe step ... download completed", "action", step.Action, "guid", ev.GUID)
 				go func() {
 					wg.Done()
 				}()
@@ -331,7 +345,8 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 		if x >= 2 {
 			break
 		}
-		log.Println("Download WG add")
+
+		b.logger.Debug("Executing recipe step ... trigger download click", "action", step.Action, "selector", n.FullXPath()+step.Value)
 		if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
 			chromedp.MouseClickNode(n),
 			chromedp.WaitVisible(n.FullXPath() + step.Value),
@@ -345,11 +360,15 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 	}
 	wg.Wait()
 
-	log.Println("All downloads completed")
+	b.logger.Debug("Executing recipe step ... downloads completed", "action", step.Action)
+	b.logger.Info("All downloads completed")
+
 	return utils.StepResult{Status: "success"}
 }
 
 func (b *BrowserDriver) stepTransform(step parser.Step) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "value", step.Value)
+
 	switch step.Value {
 	case "unzip":
 		zipFiles, err := utils.FindFiles(b.downloadsDirectory, ".zip")
@@ -358,6 +377,8 @@ func (b *BrowserDriver) stepTransform(step parser.Step) utils.StepResult {
 			fmt.Println(err)
 		}
 		for _, s := range zipFiles {
+			b.logger.Debug("Executing recipe step ... unzipping file", "action", step.Action, "source", s, "destination", b.downloadsDirectory)
+			b.logger.Info("Unzipping file", "source", s, "destination", b.downloadsDirectory)
 			err := utils.UnzipFile(s, b.downloadsDirectory)
 			if err != nil {
 				return utils.StepResult{Status: "error", Message: err.Error()}
@@ -369,6 +390,8 @@ func (b *BrowserDriver) stepTransform(step parser.Step) utils.StepResult {
 }
 
 func (b *BrowserDriver) stepMove(step parser.Step, documentArchive *archive.DocumentArchive) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "value", step.Value)
+
 	b.newFilesCount = 0
 	err := filepath.WalkDir(b.downloadsDirectory, func(s string, d fs.DirEntry, e error) error {
 		if e != nil {
@@ -382,6 +405,8 @@ func (b *BrowserDriver) stepMove(step parser.Step, documentArchive *archive.Docu
 			srcFile := filepath.Join(b.downloadsDirectory, d.Name())
 			// Check if file already exists
 			if !documentArchive.FileExists(srcFile) {
+				b.logger.Debug("Executing recipe step ... moving file", "action", step.Action, "source", srcFile, "destination", filepath.Join(b.documentsDirectory, d.Name()))
+				b.logger.Info("Moving file", "source", srcFile, "destination", filepath.Join(b.documentsDirectory, d.Name()))
 				b.newFilesCount++
 				_, err := utils.CopyFile(srcFile, filepath.Join(b.documentsDirectory, d.Name()))
 				if err != nil {
@@ -399,8 +424,9 @@ func (b *BrowserDriver) stepMove(step parser.Step, documentArchive *archive.Docu
 }
 
 func (b *BrowserDriver) stepRunScript(ctx context.Context, step parser.Step) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "value", step.Value)
+
 	var res []string
-	log.Println(`SCRIPT: ` + step.Value)
 	if err := chromedp.Run(ctx,
 		chromedp.Evaluate(step.Value, &res),
 	); err != nil {
@@ -410,11 +436,12 @@ func (b *BrowserDriver) stepRunScript(ctx context.Context, step parser.Step) uti
 }
 
 func (b *BrowserDriver) stepRunScriptDownloadUrls(ctx context.Context, step parser.Step) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "value", step.Value)
+
 	var res []string
-	log.Println(`SCRIPT DOWNLOAD ARRAY: ` + step.Value)
 	chromedp.Evaluate(`Object.values(`+step.Value+`);`, &res)
 	for _, url := range res {
-		log.Println(`DOWNLOAD: ` + url)
+		b.logger.Debug("Executing recipe step ... download", "action", step.Action, "url", url)
 		if err := chromedp.Run(ctx,
 			browser.
 				SetDownloadBehavior(browser.SetDownloadBehaviorBehaviorAllowAndName).
@@ -450,13 +477,13 @@ func (b *BrowserDriver) disableImages(ctx context.Context) func(event interface{
 				if ev.ResourceType == network.ResourceTypeImage {
 					err := fetch.FailRequest(ev.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
 					if err != nil {
-						log.Printf("Failed to block image request: %v", err)
+						b.logger.Debug("Failed to block image request", "error", err.Error())
 						return
 					}
 				} else {
 					err := fetch.ContinueRequest(ev.RequestID).Do(ctx)
 					if err != nil {
-						log.Printf("Failed to continue request: %v", err)
+						b.logger.Debug("Failed to continue request", "error", err.Error())
 						return
 					}
 				}
