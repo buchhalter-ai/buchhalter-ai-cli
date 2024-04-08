@@ -64,7 +64,7 @@ func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchh
 	}
 }
 
-func (b *BrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe) utils.RecipeResult {
+func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, scs int, bcs int, recipe *parser.Recipe) utils.RecipeResult {
 	// Init browser
 	b.logger.Info("Starting chrome browser driver ...", "recipe", recipe.Provider, "recipe_version", recipe.Version)
 	ctx, cancel, err := cu.New(cu.NewConfig(
@@ -209,7 +209,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, rec
 			}
 			return result
 		}
-		cs = (float64(bcs) + float64(n)) / float64(tsc)
+		cs = (float64(bcs) + float64(n)) / float64(totalStepCount)
 		p.Send(utils.ResultProgressUpdate{Percent: cs})
 		n++
 	}
