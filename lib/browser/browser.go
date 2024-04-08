@@ -127,38 +127,38 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, rec
 	n := 1
 	var result utils.RecipeResult
 	for _, step := range recipe.Steps {
-		sr := make(chan utils.StepResult, 1)
+		stepResultChan := make(chan utils.StepResult, 1)
 		p.Send(utils.ResultTitleAndDescriptionUpdate{Title: "Downloading invoices from " + recipe.Provider + " (" + strconv.Itoa(n) + "/" + strconv.Itoa(scs) + "):", Description: step.Description})
 		/** Timeout recipe if something goes wrong */
 		go func() {
 			switch action := step.Action; action {
 			case "open":
-				sr <- b.stepOpen(ctx, step)
+				stepResultChan <- b.stepOpen(ctx, step)
 			case "removeElement":
-				sr <- b.stepRemoveElement(ctx, step)
+				stepResultChan <- b.stepRemoveElement(ctx, step)
 			case "click":
-				sr <- b.stepClick(ctx, step)
+				stepResultChan <- b.stepClick(ctx, step)
 			case "type":
-				sr <- b.stepType(ctx, step, b.credentials)
+				stepResultChan <- b.stepType(ctx, step, b.credentials)
 			case "sleep":
-				sr <- b.stepSleep(ctx, step)
+				stepResultChan <- b.stepSleep(ctx, step)
 			case "waitFor":
-				sr <- b.stepWaitFor(ctx, step)
+				stepResultChan <- b.stepWaitFor(ctx, step)
 			case "downloadAll":
-				sr <- b.stepDownloadAll(ctx, step)
+				stepResultChan <- b.stepDownloadAll(ctx, step)
 			case "transform":
-				sr <- b.stepTransform(step)
+				stepResultChan <- b.stepTransform(step)
 			case "move":
-				sr <- b.stepMove(step, b.documentArchive)
+				stepResultChan <- b.stepMove(step, b.documentArchive)
 			case "runScript":
-				sr <- b.stepRunScript(ctx, step)
+				stepResultChan <- b.stepRunScript(ctx, step)
 			case "runScriptDownloadUrls":
-				sr <- b.stepRunScriptDownloadUrls(ctx, step)
+				stepResultChan <- b.stepRunScriptDownloadUrls(ctx, step)
 			}
 		}()
 
 		select {
-		case lsr := <-sr:
+		case lsr := <-stepResultChan:
 			newDocumentsText := strconv.Itoa(b.newFilesCount) + " new documents"
 			if b.newFilesCount == 1 {
 				newDocumentsText = "One new document"
