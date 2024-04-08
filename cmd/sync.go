@@ -126,8 +126,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 }
 
 func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksum string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
-	t := "Build archive index"
-	p.Send(resultStatusUpdate{title: t})
+	p.Send(resultStatusUpdate{title: "Build archive index"})
 
 	logger.Info("Building document archive index ...")
 	err := documentArchive.BuildArchiveIndex()
@@ -138,10 +137,8 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	}
 
 	developmentMode := viper.GetBool("dev")
-	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 	if !developmentMode {
-		t = "Checking for repository updates"
-		p.Send(resultStatusUpdate{title: t})
+		p.Send(resultStatusUpdate{title: "Checking for repository updates"})
 
 		logger.Info("Checking for OICDB repository updates ...", "local_checksum", localOICDBChecksum)
 		err := buchhalterAPIClient.UpdateIfAvailable(localOICDBChecksum)
@@ -152,43 +149,45 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		}
 	}
 
-	r := prepareRecipes(logger, provider, vaultProvider, recipeParser)
+	recipesToExecute := prepareRecipes(logger, provider, vaultProvider, recipeParser)
 	// No credentials found for provider/recipes
-	if len(r) == 0 {
+	if len(recipesToExecute) == 0 {
 		// TODO Implement better error handling
 		logger.Error("No recipes found for suppliers", "provider", provider)
 		fmt.Println("No recipes found for suppliers")
 		os.Exit(1)
 	}
 
-	rc := len(r)
-	if rc == 1 {
+	var t string
+	recipeCount := len(recipesToExecute)
+	if recipeCount == 1 {
 		t = "Running one recipe..."
-		logger.Info("Running one recipe ...", "supplier", r[0].recipe.Provider)
+		logger.Info("Running one recipe ...", "supplier", recipesToExecute[0].recipe.Provider)
 	} else {
-		t = "Running recipes for " + fmt.Sprintf("%d", rc) + " suppliers..."
-		logger.Info("Running recipes for multiple suppliers...", "num_suppliers", rc)
+		t = "Running recipes for " + fmt.Sprintf("%d", recipeCount) + " suppliers..."
+		logger.Info("Running recipes for multiple suppliers...", "num_suppliers", recipeCount)
 	}
 	p.Send(resultStatusUpdate{title: t})
 	p.Send(ResultProgressUpdate{Percent: 0.001})
 
 	buchhalterDirectory := viper.GetString("buchhalter_directory")
+	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 
 	tsc := 0 //total steps count
 	scs := 0 //count steps current recipe
 	bcs := 0 //base count steps
 	var recipeResult utils.RecipeResult
-	for i := range r {
-		tsc += len(r[i].recipe.Steps)
+	for i := range recipesToExecute {
+		tsc += len(recipesToExecute[i].recipe.Steps)
 	}
-	for i := range r {
+	for i := range recipesToExecute {
 		s := time.Now()
-		scs = len(r[i].recipe.Steps)
-		p.Send(resultStatusUpdate{title: "Downloading invoices from " + r[i].recipe.Provider + ":", hasError: false})
+		scs = len(recipesToExecute[i].recipe.Steps)
+		p.Send(resultStatusUpdate{title: "Downloading invoices from " + recipesToExecute[i].recipe.Provider + ":", hasError: false})
 
 		// Load username, password, totp from vault
-		logger.Info("Requesting credentials from vault", "supplier", r[i].recipe.Provider)
-		recipeCredentials, err := vaultProvider.GetCredentialsByItemId(r[i].vaultItemId)
+		logger.Info("Requesting credentials from vault", "supplier", recipesToExecute[i].recipe.Provider)
+		recipeCredentials, err := vaultProvider.GetCredentialsByItemId(recipesToExecute[i].vaultItemId)
 		if err != nil {
 			// TODO Implement better error handling
 			logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
@@ -196,11 +195,11 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			continue
 		}
 
-		logger.Info("Downloading invoices ...", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type)
-		switch r[i].recipe.Type {
+		logger.Info("Downloading invoices ...", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type)
+		switch recipesToExecute[i].recipe.Type {
 		case "browser":
 			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDirectory, documentArchive)
-			recipeResult = browserDriver.RunRecipe(p, tsc, scs, bcs, r[i].recipe)
+			recipeResult = browserDriver.RunRecipe(p, tsc, scs, bcs, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = browserDriver.ChromeVersion
 			}
@@ -212,7 +211,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			}
 		case "client":
 			clientDriver := client.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
-			recipeResult = clientDriver.RunRecipe(p, tsc, scs, bcs, r[i].recipe)
+			recipeResult = clientDriver.RunRecipe(p, tsc, scs, bcs, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = clientDriver.ChromeVersion
 			}
@@ -224,8 +223,8 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			}
 		}
 		rdx := repository.RunDataProvider{
-			Provider:         r[i].recipe.Provider,
-			Version:          r[i].recipe.Version,
+			Provider:         recipesToExecute[i].recipe.Provider,
+			Version:          recipesToExecute[i].recipe.Version,
 			Status:           recipeResult.StatusText,
 			LastErrorMessage: recipeResult.LastErrorMessage,
 			Duration:         time.Since(s).Seconds(),
@@ -234,7 +233,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		RunData = append(RunData, rdx)
 		// TODO Check for recipeResult.LastErrorMessage
 		p.Send(resultMsg{duration: time.Since(s), newFilesCount: recipeResult.NewFilesCount, step: recipeResult.StatusTextFormatted, errorMessage: recipeResult.LastErrorMessage})
-		logger.Info("Downloading invoices ... completed", "supplier", r[i].recipe.Provider, "supplier_type", r[i].recipe.Type, "duration", time.Since(s), "new_files", recipeResult.NewFilesCount)
+		logger.Info("Downloading invoices ... completed", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type, "duration", time.Since(s), "new_files", recipeResult.NewFilesCount)
 
 		bcs += scs
 	}
@@ -249,11 +248,9 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			fmt.Println(err)
 		}
 
-		logger.Info("Initializing shutdown")
 		p.Send(quitMsg{})
 
 	} else if developmentMode {
-		logger.Info("Initializing shutdown")
 		p.Send(quitMsg{})
 
 	} else {
