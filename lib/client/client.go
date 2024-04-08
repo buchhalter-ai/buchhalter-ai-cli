@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -16,8 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/chromedp/cdproto/cdp"
 
 	"buchhalter/lib/archive"
 	"buchhalter/lib/parser"
@@ -28,6 +25,7 @@ import (
 	cu "github.com/Davincible/chromedp-undetected"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
@@ -83,19 +81,10 @@ func NewClientAuthBrowserDriver(logger *slog.Logger, credentials *vault.Credenti
 }
 
 func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe) utils.RecipeResult {
-	// Init directories
-	var err error
-	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDirectory, recipe.Provider)
-	if err != nil {
-		// TODO Implement error handling
-		fmt.Println(err)
-	}
-
-	// Init browser
+	b.logger.Info("Starting client auth chrome browser driver ...", "recipe", recipe.Provider, "recipe_version", recipe.Version)
 	ctx, cancel, err := cu.New(cu.NewConfig(
 		cu.WithContext(b.browserCtx),
 	))
-
 	if err != nil {
 		// TODO Implement error handling
 		panic(err)
@@ -110,10 +99,19 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bc
 		})
 		if err != nil {
 			// TODO Implement error handling
-			log.Fatal(err)
+			panic(err)
 		}
 		b.ChromeVersion = strings.TrimSpace(b.ChromeVersion)
 	}
+	b.logger.Info("Starting client auth chrome browser driver ... completed ", "recipe", recipe.Provider, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
+
+	// create download directories
+	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDirectory, recipe.Provider)
+	if err != nil {
+		// TODO Implement error handling
+		fmt.Println(err)
+	}
+	b.logger.Info("Download directories created", "downloads_directory", b.downloadsDirectory, "documents_directory", b.documentsDirectory)
 
 	var cs float64
 	n := 1
@@ -189,6 +187,8 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bc
 }
 
 func (b *ClientAuthBrowserDriver) stepOauth2Setup(step parser.Step) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "auth_url", step.Oauth2.AuthUrl)
+
 	b.oauth2AuthUrl = step.Oauth2.AuthUrl
 	b.oauth2TokenUrl = step.Oauth2.TokenUrl
 	b.oauth2RedirectUrl = step.Oauth2.RedirectUrl
@@ -201,7 +201,9 @@ func (b *ClientAuthBrowserDriver) stepOauth2Setup(step parser.Step) utils.StepRe
 }
 
 func (b *ClientAuthBrowserDriver) stepOauth2CheckTokens(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials, buchhalterConfigDirectory string) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action)
 	b.logger.Info("Checking OAuth2 tokens ...")
+
 	// Try to get secrets from cache
 	pii := recipe.Provider + "|" + credentials.Id
 	tokens, err := secrets.GetOauthAccessTokenFromCache(pii, buchhalterConfigDirectory)
@@ -231,7 +233,9 @@ func (b *ClientAuthBrowserDriver) stepOauth2CheckTokens(ctx context.Context, rec
 }
 
 func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, recipe *parser.Recipe, step parser.Step, credentials *vault.Credentials, buchhalterConfigDirectory string) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action)
 	b.logger.Info("Authenticating with OAuth2 ...")
+
 	if len(b.oauth2AuthToken) > 0 {
 		return utils.StepResult{Status: "success"}
 	}
@@ -337,6 +341,8 @@ func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, re
 }
 
 func (b *ClientAuthBrowserDriver) stepOauth2PostAndGetItems(ctx context.Context, step parser.Step, documentArchive *archive.DocumentArchive) utils.StepResult {
+	b.logger.Debug("Executing recipe step", "action", step.Action, "url", step.URL)
+
 	payload := []byte(step.Body)
 	req, err := http.NewRequestWithContext(ctx, "POST", step.URL, bytes.NewBuffer(payload))
 	if err != nil {
