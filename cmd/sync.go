@@ -275,7 +275,7 @@ func prepareRecipes(logger *slog.Logger, provider string, vaultProvider *vault.P
 
 	// Run single provider recipe
 	var r []recipeToExecute
-	sc := 0
+	stepCount := 0
 	vaultItems := vaultProvider.VaultItems
 	if provider != "" {
 		logger.Info("Search for credentials for suppliers recipe ...", "supplier", provider)
@@ -296,7 +296,7 @@ func prepareRecipes(logger *slog.Logger, provider string, vaultProvider *vault.P
 			// Check if a recipe exists for the item
 			recipe := recipeParser.GetRecipeForItem(vaultItems[i], vaultProvider.UrlsByItemId)
 			if recipe != nil {
-				sc = sc + len(recipe.Steps)
+				stepCount = stepCount + len(recipe.Steps)
 				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
 				logger.Info("Search for matching pairs of recipes for supplier recipes and credentials ... found", "supplier", recipe.Provider, "credentials_id", vaultItems[i].ID)
 			}
