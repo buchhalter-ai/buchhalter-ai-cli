@@ -117,24 +117,24 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 	n := 1
 	var result utils.RecipeResult
 	for _, step := range recipe.Steps {
-		sr := make(chan utils.StepResult, 1)
+		stepResultChan := make(chan utils.StepResult, 1)
 		p.Send(utils.ResultTitleAndDescriptionUpdate{Title: "Downloading invoices from " + recipe.Provider + " (" + strconv.Itoa(n) + "/" + strconv.Itoa(stepCountInCurrentRecipe) + "):", Description: step.Description})
 		// Timeout recipe if something goes wrong
 		go func() {
 			switch step.Action {
 			case "oauth2-setup":
-				sr <- b.stepOauth2Setup(step)
+				stepResultChan <- b.stepOauth2Setup(step)
 			case "oauth2-check-tokens":
-				sr <- b.stepOauth2CheckTokens(ctx, recipe, step, b.credentials, b.buchhalterConfigDirectory)
+				stepResultChan <- b.stepOauth2CheckTokens(ctx, recipe, step, b.credentials, b.buchhalterConfigDirectory)
 			case "oauth2-authenticate":
-				sr <- b.stepOauth2Authenticate(ctx, recipe, step, b.credentials, b.buchhalterConfigDirectory)
+				stepResultChan <- b.stepOauth2Authenticate(ctx, recipe, step, b.credentials, b.buchhalterConfigDirectory)
 			case "oauth2-post-and-get-items":
-				sr <- b.stepOauth2PostAndGetItems(ctx, step, b.documentArchive)
+				stepResultChan <- b.stepOauth2PostAndGetItems(ctx, step, b.documentArchive)
 			}
 		}()
 
 		select {
-		case lsr := <-sr:
+		case lsr := <-stepResultChan:
 			newDocumentsText := strconv.Itoa(b.newFilesCount) + " new documents"
 			if b.newFilesCount == 1 {
 				newDocumentsText = "One new document"
