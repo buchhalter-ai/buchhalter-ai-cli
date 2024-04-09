@@ -25,12 +25,6 @@ var (
 	documentsDirectory string
 )
 
-type StepResult struct {
-	Status  string
-	Message string
-	Break   bool
-}
-
 // ViewMsgProgressUpdate updates the progress bar in the bubbletea application.
 // "Percent" represents the percentage of the progress bar.
 type ViewMsgProgressUpdate struct {
@@ -43,6 +37,7 @@ type ViewMsgStatusAndDescriptionUpdate struct {
 	Description string
 }
 
+// RecipeResult represents the result of a single recipe execution.
 type RecipeResult struct {
 	Status              string
 	StatusText          string
@@ -51,6 +46,13 @@ type RecipeResult struct {
 	LastStepDescription string
 	LastErrorMessage    string
 	NewFilesCount       int
+}
+
+// StepResult represents the result of a single step execution.
+type StepResult struct {
+	Status  string
+	Message string
+	Break   bool
 }
 
 func InitProviderDirectories(buchhalterDirectory, provider string) (string, string, error) {
