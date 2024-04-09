@@ -20,11 +20,6 @@ const (
 	randomStringCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
-var (
-	downloadsDirectory string
-	documentsDirectory string
-)
-
 // ViewMsgProgressUpdate updates the progress bar in the bubbletea application.
 // "Percent" represents the percentage of the progress bar.
 type ViewMsgProgressUpdate struct {
@@ -56,8 +51,8 @@ type StepResult struct {
 }
 
 func InitProviderDirectories(buchhalterDirectory, provider string) (string, string, error) {
-	downloadsDirectory = filepath.Join(buchhalterDirectory, "_tmp", provider)
-	documentsDirectory = filepath.Join(buchhalterDirectory, provider)
+	downloadsDirectory := filepath.Join(buchhalterDirectory, "_tmp", provider)
+	documentsDirectory := filepath.Join(buchhalterDirectory, provider)
 	err := CreateDirectoryIfNotExists(downloadsDirectory)
 	if err != nil {
 		return "", "", err
