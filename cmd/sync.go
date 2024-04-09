@@ -561,7 +561,7 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.progress.SetPercent(msg.Percent)
 		return m, cmd
 
-	case utils.ResultTitleAndDescriptionUpdate:
+	case utils.ViewMsgStatusAndDescriptionUpdate:
 		m.currentAction = msg.Title
 		m.details = msg.Description
 		return m, nil

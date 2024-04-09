@@ -37,7 +37,8 @@ type ViewMsgProgressUpdate struct {
 	Percent float64
 }
 
-type ResultTitleAndDescriptionUpdate struct {
+// ViewMsgStatusAndDescriptionUpdate updates the status and description in the bubbletea application.
+type ViewMsgStatusAndDescriptionUpdate struct {
 	Title       string
 	Description string
 }

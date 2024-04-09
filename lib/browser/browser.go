@@ -127,9 +127,13 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 	n := 1
 	var result utils.RecipeResult
 	for _, step := range recipe.Steps {
+		p.Send(utils.ViewMsgStatusAndDescriptionUpdate{
+			Title:       fmt.Sprintf("Downloading invoices from %s (%d/%d):", recipe.Provider, n, stepCountInCurrentRecipe),
+			Description: step.Description,
+		})
+
 		stepResultChan := make(chan utils.StepResult, 1)
-		p.Send(utils.ResultTitleAndDescriptionUpdate{Title: "Downloading invoices from " + recipe.Provider + " (" + strconv.Itoa(n) + "/" + strconv.Itoa(stepCountInCurrentRecipe) + "):", Description: step.Description})
-		/** Timeout recipe if something goes wrong */
+		// Timeout recipe if something goes wrong
 		go func() {
 			switch action := step.Action; action {
 			case "open":
