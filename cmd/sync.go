@@ -342,8 +342,8 @@ var (
 	choices       = []string{"Yes", "No", "Always yes (don't ask again)"}
 )
 
-// model is the bubbletea application main model (view)
-type model struct {
+// viewModel is the bubbletea application main viewModel (view)
+type viewModel struct {
 	mode          string
 	currentAction string
 	details       string
@@ -403,14 +403,14 @@ type ResultProgressUpdate struct {
 type tickMsg time.Time
 
 // initialModel returns the model for the bubbletea application.
-func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password, buchhalterAPIClient *repository.BuchhalterAPIClient, recipeParser *parser.RecipeParser) model {
+func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password, buchhalterAPIClient *repository.BuchhalterAPIClient, recipeParser *parser.RecipeParser) viewModel {
 	const numLastResults = 5
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = spinnerStyle
 
-	m := model{
+	m := viewModel{
 		mode:          "sync",
 		currentAction: "Initializing...",
 		details:       "Loading...",
@@ -431,7 +431,7 @@ func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password, b
 
 // Init initializes the bubbletea application.
 // Returns an initial command for the application to run.
-func (m model) Init() tea.Cmd {
+func (m viewModel) Init() tea.Cmd {
 	return tea.Sequence(
 		m.spinner.Tick,
 	)
@@ -439,7 +439,7 @@ func (m model) Init() tea.Cmd {
 
 // Update updates the bubbletea application model.
 // Handles incoming events and updates the model accordingly.
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
@@ -558,7 +558,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the bubbletea application view.
 // Renders the UI based on the data in the model.
-func (m model) View() string {
+func (m viewModel) View() string {
 	var s string
 	s = fmt.Sprintf(
 		"%s\n%s\n%s%s\n%s\n",
@@ -618,7 +618,7 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-func quit(m model) model {
+func quit(m viewModel) viewModel {
 	if m.hasError {
 		m.currentAction = "ERROR while running recipes!"
 		m.quitting = true
