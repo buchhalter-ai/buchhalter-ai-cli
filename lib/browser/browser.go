@@ -163,7 +163,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 
 		select {
 		case lastStepResult := <-stepResultChan:
-			newDocumentsText := strconv.Itoa(b.newFilesCount) + " new documents"
+			newDocumentsText := fmt.Sprintf("%d new documents", b.newFilesCount)
 			if b.newFilesCount == 1 {
 				newDocumentsText = "One new document"
 			}
@@ -175,7 +175,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 					Status:              "success",
 					StatusText:          recipe.Provider + ": " + newDocumentsText,
 					StatusTextFormatted: "- " + textStyleBold(recipe.Provider) + ": " + newDocumentsText,
-					LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
+					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Provider, recipe.Version, n, step.Action),
 					LastStepDescription: step.Description,
 					NewFilesCount:       b.newFilesCount,
 				}
@@ -184,7 +184,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 					Status:              "error",
 					StatusText:          recipe.Provider + "aborted with error.",
 					StatusTextFormatted: "x " + textStyleBold(recipe.Provider) + " aborted with error.",
-					LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
+					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Provider, recipe.Version, n, step.Action),
 					LastStepDescription: step.Description,
 					LastErrorMessage:    lastStepResult.Message,
 					NewFilesCount:       b.newFilesCount,
@@ -202,7 +202,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 				Status:              "error",
 				StatusText:          recipe.Provider + " aborted with timeout.",
 				StatusTextFormatted: "x " + textStyleBold(recipe.Provider) + " aborted with timeout.",
-				LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
+				LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Provider, recipe.Version, n, step.Action),
 				LastStepDescription: step.Description,
 				NewFilesCount:       b.newFilesCount,
 			}
