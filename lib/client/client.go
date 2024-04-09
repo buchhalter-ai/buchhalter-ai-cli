@@ -80,7 +80,7 @@ func NewClientAuthBrowserDriver(logger *slog.Logger, credentials *vault.Credenti
 	}
 }
 
-func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bcs int, recipe *parser.Recipe) utils.RecipeResult {
+func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, scs int, bcs int, recipe *parser.Recipe) utils.RecipeResult {
 	b.logger.Info("Starting client auth chrome browser driver ...", "recipe", recipe.Provider, "recipe_version", recipe.Version)
 	ctx, cancel, err := cu.New(cu.NewConfig(
 		cu.WithContext(b.browserCtx),
@@ -178,7 +178,7 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, tsc int, scs int, bc
 			return result
 		}
 
-		cs = (float64(bcs) + float64(n)) / float64(tsc)
+		cs = (float64(bcs) + float64(n)) / float64(totalStepCount)
 		p.Send(utils.ResultProgressUpdate{Percent: cs})
 		n++
 	}
