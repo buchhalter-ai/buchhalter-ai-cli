@@ -45,7 +45,9 @@ type BrowserDriver struct {
 	downloadsDirectory string
 	documentsDirectory string
 
-	browserCtx    context.Context
+	chromeUndetectedCancelFunc context.CancelFunc
+	timeoutCancelFunc          context.CancelFunc
+
 	recipeTimeout time.Duration
 	newFilesCount int
 }
@@ -58,27 +60,29 @@ func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchh
 
 		buchhalterDirectory: buchhalterDirectory,
 
-		browserCtx:    context.Background(),
 		recipeTimeout: 60 * time.Second,
 		newFilesCount: 0,
 	}
 }
 
 func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) utils.RecipeResult {
+	var err error
+	var ctx context.Context
+
 	// Init browser
 	b.logger.Info("Starting chrome browser driver ...", "recipe", recipe.Provider, "recipe_version", recipe.Version)
-	ctx, cancel, err := cu.New(cu.NewConfig(
-		cu.WithContext(b.browserCtx),
+	ctx, b.chromeUndetectedCancelFunc, err = cu.New(cu.NewConfig(
+		cu.WithContext(context.Background()),
 	))
 	if err != nil {
 		// TODO Implement error handling
 		panic(err)
 	}
-	defer cancel()
+	defer b.chromeUndetectedCancelFunc()
 
 	// create a timeout as a safety net to prevent any infinite wait loops
-	ctx, cancel = context.WithTimeout(ctx, 600*time.Second)
-	defer cancel()
+	ctx, b.timeoutCancelFunc = context.WithTimeout(ctx, 600*time.Second)
+	defer b.timeoutCancelFunc()
 
 	// get chrome version for metrics
 	if b.ChromeVersion == "" {
@@ -227,9 +231,11 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 }
 
 func (b *BrowserDriver) Quit() error {
-	if b.browserCtx != nil {
-		return chromedp.Cancel(b.browserCtx)
-	}
+	// Cancel browser
+	b.chromeUndetectedCancelFunc()
+
+	// Cancel default timeout
+	b.timeoutCancelFunc()
 
 	return nil
 }

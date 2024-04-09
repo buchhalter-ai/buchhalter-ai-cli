@@ -33,6 +33,11 @@ type recipeToExecute struct {
 	vaultItemId string
 }
 
+type cmdSyncApp struct {
+	browserInstance           *browser.BrowserDriver
+	clientAuthBrowserInstance *client.ClientAuthBrowserDriver
+}
+
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Synchronize all invoices from your suppliers",
@@ -95,8 +100,9 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	metricsUrl := viper.GetString("buchhalter_metrics_url")
 	buchhalterAPIClient := repository.NewBuchhalterAPIClient(logger, buchhalterConfigDirectory, repositoryUrl, metricsUrl, CliVersion)
 
+	app := &cmdSyncApp{}
 	viewModel := initialModel(logger, vaultProvider, buchhalterAPIClient, recipeParser)
-	p := tea.NewProgram(viewModel)
+	p := tea.NewProgram(viewModel, tea.WithFilter(app.quitFilter))
 
 	// Load vault items/try to connect to vault
 	vaultItems, err := vaultProvider.LoadVaultItems()
@@ -116,7 +122,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
 
 	// Run recipes
-	go runRecipes(p, logger, provider, localOICDBChecksum, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
+	go app.runRecipes(p, logger, provider, localOICDBChecksum, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
 
 	if _, err := p.Run(); err != nil {
 		logger.Error("Error running program", "error", err)
@@ -125,7 +131,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 }
 
-func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksum string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
+func (app *cmdSyncApp) runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksum string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
 	p.Send(viewMsgStatusUpdate{
 		title:    "Build archive index",
 		hasError: false,
@@ -210,29 +216,31 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		logger.Info("Downloading invoices ...", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type)
 		switch recipesToExecute[i].recipe.Type {
 		case "browser":
-			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDirectory, documentArchive)
-			recipeResult = browserDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
+			app.browserInstance = browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDirectory, documentArchive)
+			recipeResult = app.browserInstance.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
-				ChromeVersion = browserDriver.ChromeVersion
+				ChromeVersion = app.browserInstance.ChromeVersion
 			}
 			// TODO Should we quit it here or inside RunRecipe?
-			err = browserDriver.Quit()
+			err = app.browserInstance.Quit()
 			if err != nil {
 				// TODO Implement better error handling
 				fmt.Println(err)
 			}
+			app.browserInstance = nil
 		case "client":
-			clientDriver := client.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
-			recipeResult = clientDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
+			app.clientAuthBrowserInstance = client.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
+			recipeResult = app.clientAuthBrowserInstance.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
-				ChromeVersion = clientDriver.ChromeVersion
+				ChromeVersion = app.clientAuthBrowserInstance.ChromeVersion
 			}
 			// TODO Should we quit it here or inside RunRecipe?
-			err = clientDriver.Quit()
+			err = app.clientAuthBrowserInstance.Quit()
 			if err != nil {
 				// TODO Implement better error handling
 				fmt.Println(err)
 			}
+			app.clientAuthBrowserInstance = nil
 		}
 		rdx := repository.RunDataProvider{
 			Provider:         recipesToExecute[i].recipe.Provider,
@@ -684,4 +692,31 @@ func quit(m viewModel) viewModel {
 	*/
 
 	return m
+}
+
+// quitFilter is a filter function that is called before bubbletea receives a message.
+// We use it to prevent the application from quitting before the browser is shut down.
+func (app *cmdSyncApp) quitFilter(teaModel tea.Model, msg tea.Msg) tea.Msg {
+	m := teaModel.(viewModel)
+
+	// Is the application quitting?
+	if _, ok := msg.(tea.QuitMsg); ok {
+
+		if app.browserInstance != nil {
+			err := app.browserInstance.Quit()
+			if err != nil {
+				m.logger.Error("Quitting browserInstance", "error", err)
+			}
+		}
+
+		if app.clientAuthBrowserInstance != nil {
+			err := app.clientAuthBrowserInstance.Quit()
+			if err != nil {
+				m.logger.Error("Quitting clientAuthBrowserInstance", "error", err)
+			}
+		}
+	}
+
+	// Passthrough the quit message to bubbletea
+	return msg
 }

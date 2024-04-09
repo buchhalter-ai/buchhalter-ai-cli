@@ -50,8 +50,9 @@ type ClientAuthBrowserDriver struct {
 	downloadsDirectory string
 	documentsDirectory string
 
+	chromeUndetectedCancelFunc context.CancelFunc
+
 	recipeTimeout time.Duration
-	browserCtx    context.Context
 	newFilesCount int
 
 	oauth2AuthToken          string
@@ -74,21 +75,23 @@ func NewClientAuthBrowserDriver(logger *slog.Logger, credentials *vault.Credenti
 		buchhalterDirectory:       buchhalterDirectory,
 
 		recipeTimeout: 120 * time.Second,
-		browserCtx:    context.Background(),
 		newFilesCount: 0,
 	}
 }
 
 func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) utils.RecipeResult {
+	var err error
+	var ctx context.Context
+
 	b.logger.Info("Starting client auth chrome browser driver ...", "recipe", recipe.Provider, "recipe_version", recipe.Version)
-	ctx, cancel, err := cu.New(cu.NewConfig(
-		cu.WithContext(b.browserCtx),
+	ctx, b.chromeUndetectedCancelFunc, err = cu.New(cu.NewConfig(
+		cu.WithContext(context.Background()),
 	))
 	if err != nil {
 		// TODO Implement error handling
 		panic(err)
 	}
-	defer cancel()
+	defer b.chromeUndetectedCancelFunc()
 
 	// get chrome version for metrics
 	if b.ChromeVersion == "" {
@@ -591,9 +594,8 @@ func extractJsonRecursive(data interface{}, keys []string) []string {
 }
 
 func (b *ClientAuthBrowserDriver) Quit() error {
-	if b.browserCtx != nil {
-		return chromedp.Cancel(b.browserCtx)
-	}
+	// Cancel browser
+	b.chromeUndetectedCancelFunc()
 
 	return nil
 }
