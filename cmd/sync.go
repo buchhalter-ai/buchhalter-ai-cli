@@ -248,10 +248,10 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			fmt.Println(err)
 		}
 
-		p.Send(quitMsg{})
+		p.Send(viewMsgQuit{})
 
 	} else if developmentMode {
-		p.Send(quitMsg{})
+		p.Send(viewMsgQuit{})
 
 	} else {
 		p.Send(resultModeUpdate{
@@ -362,7 +362,8 @@ type viewModel struct {
 	logger              *slog.Logger
 }
 
-type quitMsg struct{}
+// viewMsgQuit initiates the shutdown sequence for the bubbletea application.
+type viewMsgQuit struct{}
 
 type resultMsg struct {
 	duration      time.Duration
@@ -485,7 +486,7 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 
-	case quitMsg:
+	case viewMsgQuit:
 		m.logger.Info("Initiating shutdown sequence")
 
 		mn := quit(m)
