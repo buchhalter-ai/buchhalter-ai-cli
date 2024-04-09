@@ -244,7 +244,12 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		}
 		RunData = append(RunData, rdx)
 		// TODO Check for recipeResult.LastErrorMessage
-		p.Send(resultMsg{duration: time.Since(startTime), newFilesCount: recipeResult.NewFilesCount, step: recipeResult.StatusTextFormatted, errorMessage: recipeResult.LastErrorMessage})
+		p.Send(viewMsgRecipeDownloadResultMsg{
+			duration:      time.Since(startTime),
+			newFilesCount: recipeResult.NewFilesCount,
+			step:          recipeResult.StatusTextFormatted,
+			errorMessage:  recipeResult.LastErrorMessage,
+		})
 		logger.Info("Downloading invoices ... completed", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type, "duration", time.Since(startTime), "new_files", recipeResult.NewFilesCount)
 
 		baseCountStep += stepCountInCurrentRecipe
@@ -364,7 +369,7 @@ type viewModel struct {
 	showProgress  bool
 	progress      progress.Model
 	spinner       spinner.Model
-	results       []resultMsg
+	results       []viewMsgRecipeDownloadResultMsg
 	quitting      bool
 	hasError      bool
 	cursor        int
@@ -379,14 +384,15 @@ type viewModel struct {
 // viewMsgQuit initiates the shutdown sequence for the bubbletea application.
 type viewMsgQuit struct{}
 
-type resultMsg struct {
+// viewMsgRecipeDownloadResultMsg registers a recipe download result in the bubbletea application.
+type viewMsgRecipeDownloadResultMsg struct {
 	duration      time.Duration
 	step          string
 	errorMessage  string
 	newFilesCount int
 }
 
-func (r resultMsg) String() string {
+func (r viewMsgRecipeDownloadResultMsg) String() string {
 	s := len(r.step)
 	if r.duration == 0 {
 		if r.step != "" {
@@ -442,7 +448,7 @@ func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password, b
 		showProgress:  true,
 		progress:      progress.New(progress.WithGradient("#9FC131", "#DBF227")),
 		spinner:       s,
-		results:       make([]resultMsg, numLastResults),
+		results:       make([]viewMsgRecipeDownloadResultMsg, numLastResults),
 		hasError:      false,
 
 		vaultProvider:       vaultProvider,
@@ -523,7 +529,7 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case resultMsg:
+	case viewMsgRecipeDownloadResultMsg:
 		m.results = append(m.results[1:], msg)
 		if msg.errorMessage != "" {
 			m.hasError = true
