@@ -80,7 +80,7 @@ func NewClientAuthBrowserDriver(logger *slog.Logger, credentials *vault.Credenti
 	}
 }
 
-func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, scs int, bcs int, recipe *parser.Recipe) utils.RecipeResult {
+func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, bcs int, recipe *parser.Recipe) utils.RecipeResult {
 	b.logger.Info("Starting client auth chrome browser driver ...", "recipe", recipe.Provider, "recipe_version", recipe.Version)
 	ctx, cancel, err := cu.New(cu.NewConfig(
 		cu.WithContext(b.browserCtx),
@@ -118,7 +118,7 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 	var result utils.RecipeResult
 	for _, step := range recipe.Steps {
 		sr := make(chan utils.StepResult, 1)
-		p.Send(utils.ResultTitleAndDescriptionUpdate{Title: "Downloading invoices from " + recipe.Provider + " (" + strconv.Itoa(n) + "/" + strconv.Itoa(scs) + "):", Description: step.Description})
+		p.Send(utils.ResultTitleAndDescriptionUpdate{Title: "Downloading invoices from " + recipe.Provider + " (" + strconv.Itoa(n) + "/" + strconv.Itoa(stepCountInCurrentRecipe) + "):", Description: step.Description})
 		// Timeout recipe if something goes wrong
 		go func() {
 			switch step.Action {
