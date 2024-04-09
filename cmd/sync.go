@@ -126,9 +126,12 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 }
 
 func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksum string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
-	p.Send(resultStatusUpdate{title: "Build archive index"})
-
+	p.Send(viewMsgStatusUpdate{
+		title:    "Build archive index",
+		hasError: false,
+	})
 	logger.Info("Building document archive index ...")
+
 	err := documentArchive.BuildArchiveIndex()
 	if err != nil {
 		// TODO Implement better error handling
@@ -138,9 +141,12 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 
 	developmentMode := viper.GetBool("dev")
 	if !developmentMode {
-		p.Send(resultStatusUpdate{title: "Checking for repository updates"})
-
+		p.Send(viewMsgStatusUpdate{
+			title:    "Checking for OICDB repository updates ...",
+			hasError: false,
+		})
 		logger.Info("Checking for OICDB repository updates ...", "local_checksum", localOICDBChecksum)
+
 		err := buchhalterAPIClient.UpdateIfAvailable(localOICDBChecksum)
 		if err != nil {
 			logger.Error("Error checking for OICDB repository updates", "error", err)
@@ -161,13 +167,16 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	var t string
 	recipeCount := len(recipesToExecute)
 	if recipeCount == 1 {
-		t = "Running one recipe..."
+		t = fmt.Sprintf("Running one recipe for supplier %s ...", recipesToExecute[0].recipe.Provider)
 		logger.Info("Running one recipe ...", "supplier", recipesToExecute[0].recipe.Provider)
 	} else {
-		t = "Running recipes for " + fmt.Sprintf("%d", recipeCount) + " suppliers..."
-		logger.Info("Running recipes for multiple suppliers...", "num_suppliers", recipeCount)
+		t = fmt.Sprintf("Running recipes for %d suppliers ...", recipeCount)
+		logger.Info("Running recipes for multiple suppliers ...", "num_suppliers", recipeCount)
 	}
-	p.Send(resultStatusUpdate{title: t})
+	p.Send(viewMsgStatusUpdate{
+		title:    t,
+		hasError: false,
+	})
 	p.Send(ResultProgressUpdate{Percent: 0.001})
 
 	buchhalterDirectory := viper.GetString("buchhalter_directory")
@@ -183,7 +192,10 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	for i := range recipesToExecute {
 		startTime := time.Now()
 		stepCountInCurrentRecipe = len(recipesToExecute[i].recipe.Steps)
-		p.Send(resultStatusUpdate{title: "Downloading invoices from " + recipesToExecute[i].recipe.Provider + ":", hasError: false})
+		p.Send(viewMsgStatusUpdate{
+			title:    "Downloading invoices from " + recipesToExecute[i].recipe.Provider + ":",
+			hasError: false,
+		})
 
 		// Load username, password, totp from vault
 		logger.Info("Requesting credentials from vault", "supplier", recipesToExecute[i].recipe.Provider)
@@ -344,7 +356,9 @@ var (
 
 // viewModel is the bubbletea application main viewModel (view)
 type viewModel struct {
-	mode          string
+	mode string
+
+	// Direct output on the screen
 	currentAction string
 	details       string
 	showProgress  bool
@@ -392,7 +406,11 @@ type resultModeUpdate struct {
 	details string
 }
 
-type resultStatusUpdate struct {
+// viewMsgStatusUpdate updates the status message in the bubbletea application.
+// "Status" represents the current action being performed by the app.
+//
+// Examples: Building index, Executing recipe, etc.
+type viewMsgStatusUpdate struct {
 	title    string
 	hasError bool
 }
@@ -509,7 +527,7 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case resultStatusUpdate:
+	case viewMsgStatusUpdate:
 		m.currentAction = msg.title
 		if msg.hasError {
 			m.hasError = true
@@ -602,10 +620,10 @@ func (m viewModel) View() string {
 		}
 	}
 
+	// Quitting or not?
 	if !m.quitting {
 		s += helpStyle.Render("Press q to exit")
 	}
-
 	if m.quitting {
 		s += "\n"
 	}
