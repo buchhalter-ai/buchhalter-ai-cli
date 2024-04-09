@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var secretsFilename string = ".secrets.json"
+const secretsFilename string = ".secrets.json"
 
 type Oauth2Tokens struct {
 	AccessToken  string `json:"access_token"`
