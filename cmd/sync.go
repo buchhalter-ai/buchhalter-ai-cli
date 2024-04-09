@@ -177,7 +177,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		title:    t,
 		hasError: false,
 	})
-	p.Send(ResultProgressUpdate{Percent: 0.001})
+	p.Send(viewMsgProgressUpdate{Percent: 0.001})
 
 	buchhalterDirectory := viper.GetString("buchhalter_directory")
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
@@ -419,7 +419,9 @@ type viewMsgStatusUpdate struct {
 	hasError bool
 }
 
-type ResultProgressUpdate struct {
+// viewMsgProgressUpdate updates the progress bar in the bubbletea application.
+// "Percent" represents the percentage of the progress bar.
+type viewMsgProgressUpdate struct {
 	Percent float64
 }
 
@@ -545,11 +547,11 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.showProgress = false
 		return m, nil
 
-	case ResultProgressUpdate:
+	case viewMsgProgressUpdate:
 		cmd := m.progress.SetPercent(msg.Percent)
 		return m, cmd
 
-	case utils.ResultProgressUpdate:
+	case utils.ViewMsgProgressUpdate:
 		cmd := m.progress.SetPercent(msg.Percent)
 		return m, cmd
 

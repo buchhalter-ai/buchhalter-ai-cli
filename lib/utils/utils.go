@@ -31,7 +31,9 @@ type StepResult struct {
 	Break   bool
 }
 
-type ResultProgressUpdate struct {
+// ViewMsgProgressUpdate updates the progress bar in the bubbletea application.
+// "Percent" represents the percentage of the progress bar.
+type ViewMsgProgressUpdate struct {
 	Percent float64
 }
 

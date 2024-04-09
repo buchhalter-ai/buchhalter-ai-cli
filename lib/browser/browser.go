@@ -210,7 +210,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 			return result
 		}
 		cs = (float64(baseCountStep) + float64(n)) / float64(totalStepCount)
-		p.Send(utils.ResultProgressUpdate{Percent: cs})
+		p.Send(utils.ViewMsgProgressUpdate{Percent: cs})
 		n++
 	}
 
