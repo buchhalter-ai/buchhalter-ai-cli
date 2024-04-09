@@ -320,7 +320,7 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
 
-	wg := &sync.WaitGroup{}
+	waitGroup := sync.WaitGroup{}
 	chromedp.ListenTarget(ctx, func(v interface{}) {
 		switch ev := v.(type) {
 		case *browser.EventDownloadWillBegin:
@@ -328,9 +328,7 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 		case *browser.EventDownloadProgress:
 			if ev.State == browser.DownloadProgressStateCompleted {
 				b.logger.Debug("Executing recipe step ... download completed", "action", step.Action, "guid", ev.GUID)
-				go func() {
-					wg.Done()
-				}()
+				waitGroup.Done()
 			}
 		}
 	})
@@ -341,7 +339,7 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 	if dl > 2 {
 		dl = 2
 	}
-	wg.Add(dl)
+
 	x := 0
 	for _, n := range nodes {
 		// TODO: We only download the latest two files for now. This should be configurable in the future.
@@ -349,6 +347,7 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 			break
 		}
 
+		waitGroup.Add(1)
 		b.logger.Debug("Executing recipe step ... trigger download click", "action", step.Action, "selector", n.FullXPath()+step.Value)
 		if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
 			chromedp.MouseClickNode(n),
@@ -361,7 +360,7 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 		time.Sleep(1500 * time.Millisecond)
 		x++
 	}
-	wg.Wait()
+	waitGroup.Wait()
 
 	b.logger.Debug("Executing recipe step ... downloads completed", "action", step.Action)
 	b.logger.Info("All downloads completed")
