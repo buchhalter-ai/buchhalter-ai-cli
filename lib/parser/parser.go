@@ -68,7 +68,6 @@ type Step struct {
 	DocumentRequestHeaders   map[string]string `json:"documentRequestHeaders,omitempty"`
 	Body                     string            `json:"body,omitempty"`
 	Headers                  map[string]string `json:"headers,omitempty"`
-	FilterUrlsWith           string            `json:"filterUrlsWith,omitempty"`
 	Execute                  string            `json:"execute,omitempty"`
 }
 
