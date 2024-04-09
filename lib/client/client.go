@@ -134,7 +134,7 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 		}()
 
 		select {
-		case lsr := <-stepResultChan:
+		case lastStepResult := <-stepResultChan:
 			newDocumentsText := strconv.Itoa(b.newFilesCount) + " new documents"
 			if b.newFilesCount == 1 {
 				newDocumentsText = "One new document"
@@ -142,7 +142,7 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 			if b.newFilesCount == 0 {
 				newDocumentsText = "No new documents"
 			}
-			if lsr.Status == "success" {
+			if lastStepResult.Status == "success" {
 				result = utils.RecipeResult{
 					Status:              "success",
 					StatusText:          recipe.Provider + ": " + newDocumentsText,
@@ -158,10 +158,10 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 					StatusTextFormatted: "x " + textStyleBold(recipe.Provider) + " aborted with error.",
 					LastStepId:          recipe.Provider + "-" + recipe.Version + "-" + strconv.Itoa(n) + "-" + step.Action,
 					LastStepDescription: step.Description,
-					LastErrorMessage:    lsr.Message,
+					LastErrorMessage:    lastStepResult.Message,
 					NewFilesCount:       b.newFilesCount,
 				}
-				if lsr.Break {
+				if lastStepResult.Break {
 					return result
 				}
 			}
