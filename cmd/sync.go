@@ -266,7 +266,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		p.Send(viewMsgQuit{})
 
 	} else {
-		p.Send(resultModeUpdate{
+		p.Send(viewMsgModeUpdate{
 			mode:    "sendMetrics",
 			title:   "Let's improve buchhalter-cli together!",
 			details: "Allow buchhalter-cli to send anonymized usage data to our api?",
@@ -400,7 +400,11 @@ func (r resultMsg) String() string {
 	return fmt.Sprintf("%s %s%s", r.step, fill, durationStyle.Render(d))
 }
 
-type resultModeUpdate struct {
+// viewMsgModeUpdate updates the mode of the bubbletea application.
+// "Mode" represents special code pathed of the applications.
+//
+// Examples: sendMetrics, sync, etc.
+type viewMsgModeUpdate struct {
 	mode    string
 	title   string
 	details string
@@ -534,7 +538,7 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case resultModeUpdate:
+	case viewMsgModeUpdate:
 		m.currentAction = msg.title
 		m.details = msg.details
 		m.mode = msg.mode
