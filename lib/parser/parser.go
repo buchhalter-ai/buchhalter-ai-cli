@@ -214,7 +214,7 @@ func (p *RecipeParser) loadLocalRecipes(buchhalterDirectory string) error {
 				return err
 			}
 			p.database.Recipes = append(p.database.Recipes, recipe)
-			p.logger.Info("Loaded local recipes for supplier", "supplier", recipe.Provider)
+			p.logger.Info("Found and loaded local recipes for supplier", "supplier", recipe.Provider)
 		}
 	}
 
