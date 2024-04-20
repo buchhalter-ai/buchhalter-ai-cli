@@ -181,6 +181,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 
 	buchhalterDirectory := viper.GetString("buchhalter_directory")
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
+	buchhalterMaxDownloadFilesPerReceipt := viper.GetInt("buchhalter_max_download_files_per_receipt")
 
 	totalStepCount := 0
 	stepCountInCurrentRecipe := 0
@@ -210,7 +211,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		logger.Info("Downloading invoices ...", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type)
 		switch recipesToExecute[i].recipe.Type {
 		case "browser":
-			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDirectory, documentArchive)
+			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDirectory, documentArchive, buchhalterMaxDownloadFilesPerReceipt)
 			recipeResult = browserDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = browserDriver.ChromeVersion
