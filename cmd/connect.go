@@ -63,7 +63,7 @@ func RunConnectCommand(cmd *cobra.Command, cmdArgs []string) {
 		input, err := reader.ReadString('\n')
 		if err != nil {
 			logger.Error("User input could not be read", "error", err)
-			fmt.Println("An error occured while reading your api token. Please try again", err)
+			fmt.Println("An error occurred while reading your api token. Please try again", err)
 		}
 		apiToken = strings.TrimSuffix(input, "\n")
 		if len(apiToken) > 0 {
