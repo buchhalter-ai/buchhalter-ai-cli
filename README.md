@@ -84,6 +84,8 @@ Usage:
   buchhalter [command]
 
 Available Commands:
+  connect     Connects to the Buchhalter Platform and verifies your premium membership
+  disconnect  Disconnects you from the Buchhalter Platform
   help        Help about any command
   sync        Synchronize all invoices from your suppliers
   version     Output the version info

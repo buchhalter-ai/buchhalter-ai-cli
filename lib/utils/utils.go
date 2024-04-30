@@ -192,3 +192,7 @@ func encode(msg []byte) string {
 	encoded = strings.Replace(encoded, "=", "", -1)
 	return encoded
 }
+
+func WriteStringToFile(filePath, content string) error {
+	return os.WriteFile(filePath, []byte(content), 0644)
+}
