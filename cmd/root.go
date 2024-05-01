@@ -99,6 +99,8 @@ func initConfig() {
 	viper.SetDefault("buchhalter_max_download_files_per_receipt", 2)
 	viper.SetDefault("buchhalter_repository_url", "https://app.buchhalter.ai/api/cli/repository")
 	viper.SetDefault("buchhalter_metrics_url", "https://app.buchhalter.ai/api/cli/metrics")
+	// TODO document setting
+	viper.SetDefault("buchhalter_user_auth_url", "https://app.buchhalter.ai/api/cli/sync")
 	viper.SetDefault("buchhalter_always_send_metrics", false)
 	viper.SetDefault("dev", false)
 

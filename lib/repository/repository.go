@@ -20,6 +20,7 @@ type BuchhalterAPIClient struct {
 	configDirectory string
 	repositoryUrl   string
 	metricsUrl      string
+	userAuthUrl     string
 	userAgent       string
 }
 
@@ -43,12 +44,33 @@ type RunDataProvider struct {
 	NewFilesCount    int     `json:"newFilesCount,omitempty"`
 }
 
-func NewBuchhalterAPIClient(logger *slog.Logger, configDirectory, repositoryUrl, metricsUrl, cliVersion string) *BuchhalterAPIClient {
+type CliSyncResponse struct {
+	Status string            `json:"status"`
+	User   AuthenticatedUser `json:"user"`
+}
+
+type AuthenticatedUser struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Teams []Team `json:"teams"`
+}
+
+type Team struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Subscription string `json:"subscription"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+func NewBuchhalterAPIClient(logger *slog.Logger, configDirectory, repositoryUrl, metricsUrl, userAuthUrl, cliVersion string) *BuchhalterAPIClient {
 	return &BuchhalterAPIClient{
 		logger:          logger,
 		configDirectory: configDirectory,
 		repositoryUrl:   repositoryUrl,
 		metricsUrl:      metricsUrl,
+		userAuthUrl:     userAuthUrl,
 		userAgent:       fmt.Sprintf("buchhalter-cli/%s", cliVersion),
 	}
 }
@@ -180,4 +202,37 @@ func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVer
 	}
 
 	return fmt.Errorf("http request to %s failed with status code: %d", c.metricsUrl, resp.StatusCode)
+}
+
+func (c *BuchhalterAPIClient) GetAuthenticatedUser(apiToken string) (*CliSyncResponse, error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.userAuthUrl, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", apiToken))
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http request to %s failed with status code: %d", c.userAuthUrl, resp.StatusCode)
+	}
+
+	var cliSyncResponse CliSyncResponse
+	err = json.NewDecoder(resp.Body).Decode(&cliSyncResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	return &cliSyncResponse, nil
 }
