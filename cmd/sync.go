@@ -92,7 +92,8 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 
 	apiHost := viper.GetString("buchhalter_api_host")
-	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, CliVersion)
+	apiToken := viper.GetString("buchhalter_api_token")
+	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiToken, CliVersion)
 	if err != nil {
 		logger.Error("Error initializing Buchhalter API client", "error", err)
 		fmt.Printf("Error initializing Buchhalter API client: %s\n", err)

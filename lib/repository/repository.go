@@ -22,12 +22,11 @@ const (
 )
 
 type BuchhalterAPIClient struct {
-	logger *slog.Logger
-
+	logger          *slog.Logger
+	apiHost         *url.URL
+	apiToken        string
 	configDirectory string
-
-	apiHost   *url.URL
-	userAgent string
+	userAgent       string
 }
 
 type Metric struct {
@@ -70,7 +69,7 @@ type Team struct {
 	UpdatedAt    string `json:"updated_at"`
 }
 
-func NewBuchhalterAPIClient(logger *slog.Logger, apiHost, configDirectory, cliVersion string) (*BuchhalterAPIClient, error) {
+func NewBuchhalterAPIClient(logger *slog.Logger, apiHost, configDirectory, apiToken, cliVersion string) (*BuchhalterAPIClient, error) {
 	u, err := url.Parse(apiHost)
 	if err != nil {
 		return nil, err
@@ -81,6 +80,7 @@ func NewBuchhalterAPIClient(logger *slog.Logger, apiHost, configDirectory, cliVe
 		configDirectory: configDirectory,
 		apiHost:         u,
 		userAgent:       fmt.Sprintf("buchhalter-cli/%s", cliVersion),
+		apiToken:        apiToken,
 	}
 
 	return c, nil
@@ -227,7 +227,7 @@ func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVer
 	return fmt.Errorf("http request to %s failed with status code: %d", apiUrl, resp.StatusCode)
 }
 
-func (c *BuchhalterAPIClient) GetAuthenticatedUser(apiToken string) (*CliSyncResponse, error) {
+func (c *BuchhalterAPIClient) GetAuthenticatedUser() (*CliSyncResponse, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -244,7 +244,7 @@ func (c *BuchhalterAPIClient) GetAuthenticatedUser(apiToken string) (*CliSyncRes
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", apiToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.apiToken))
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
