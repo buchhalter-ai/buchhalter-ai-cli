@@ -44,12 +44,13 @@ type Recipe struct {
 }
 
 type Step struct {
-	Action      string `json:"action"`
-	URL         string `json:"url,omitempty"`
-	Selector    string `json:"selector,omitempty"`
-	Value       string `json:"value,omitempty"`
-	Description string `json:"description,omitempty"`
-	When        struct {
+	Action       string `json:"action"`
+	URL          string `json:"url,omitempty"`
+	Selector     string `json:"selector,omitempty"`
+	SelectorType string `json:"selectorType,omitempty"`
+	Value        string `json:"value,omitempty"`
+	Description  string `json:"description,omitempty"`
+	When         struct {
 		URL string `json:"url"`
 	} `json:"when,omitempty"`
 	Oauth2 struct {

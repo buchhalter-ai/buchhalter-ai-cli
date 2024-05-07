@@ -267,8 +267,15 @@ func (b *BrowserDriver) stepRemoveElement(ctx context.Context, step parser.Step)
 func (b *BrowserDriver) stepClick(ctx context.Context, step parser.Step) utils.StepResult {
 	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector)
 
+	opts := []chromedp.QueryOption{
+		chromedp.NodeReady,
+	}
+	if step.SelectorType == "JSPath" {
+		opts = append(opts, chromedp.ByJSPath)
+	}
+
 	if err := chromedp.Run(ctx,
-		chromedp.Click(step.Selector, chromedp.NodeReady),
+		chromedp.Click(step.Selector, opts...),
 	); err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
@@ -279,8 +286,16 @@ func (b *BrowserDriver) stepType(ctx context.Context, step parser.Step, credenti
 	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector, "value", step.Value)
 
 	step.Value = b.parseCredentialPlaceholders(step.Value, credentials)
+
+	opts := []chromedp.QueryOption{
+		chromedp.NodeReady,
+	}
+	if step.SelectorType == "JSPath" {
+		opts = append(opts, chromedp.ByJSPath)
+	}
+
 	if err := chromedp.Run(ctx,
-		chromedp.SendKeys(step.Selector, step.Value, chromedp.NodeReady),
+		chromedp.SendKeys(step.Selector, step.Value, opts...),
 	); err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
