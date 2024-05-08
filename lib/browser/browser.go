@@ -270,9 +270,7 @@ func (b *BrowserDriver) stepClick(ctx context.Context, step parser.Step) utils.S
 	opts := []chromedp.QueryOption{
 		chromedp.NodeReady,
 	}
-	if step.SelectorType == "JSPath" {
-		opts = append(opts, chromedp.ByJSPath)
-	}
+	opts = b.getSelectorTypeQueryOptions(step.SelectorType, opts)
 
 	if err := chromedp.Run(ctx,
 		chromedp.Click(step.Selector, opts...),
@@ -290,9 +288,7 @@ func (b *BrowserDriver) stepType(ctx context.Context, step parser.Step, credenti
 	opts := []chromedp.QueryOption{
 		chromedp.NodeReady,
 	}
-	if step.SelectorType == "JSPath" {
-		opts = append(opts, chromedp.ByJSPath)
-	}
+	opts = b.getSelectorTypeQueryOptions(step.SelectorType, opts)
 
 	if err := chromedp.Run(ctx,
 		chromedp.SendKeys(step.Selector, step.Value, opts...),
@@ -317,8 +313,10 @@ func (b *BrowserDriver) stepSleep(ctx context.Context, step parser.Step) utils.S
 func (b *BrowserDriver) stepWaitFor(ctx context.Context, step parser.Step) utils.StepResult {
 	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector)
 
+	opts := []chromedp.QueryOption{}
+	opts = b.getSelectorTypeQueryOptions(step.SelectorType, opts)
 	if err := chromedp.Run(ctx,
-		chromedp.WaitReady(step.Selector),
+		chromedp.WaitReady(step.Selector, opts...),
 	); err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
@@ -328,9 +326,11 @@ func (b *BrowserDriver) stepWaitFor(ctx context.Context, step parser.Step) utils
 func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector, "buchhalter_max_download_files_per_receipt", b.maxFilesDownloaded)
 
+	opts := []chromedp.QueryOption{}
+	opts = b.getSelectorTypeQueryOptions(step.SelectorType, opts)
 	var nodes []*cdp.Node
 	err := chromedp.Run(ctx, chromedp.Tasks{
-		chromedp.WaitReady(step.Selector),
+		chromedp.WaitReady(step.Selector, opts...),
 		chromedp.Nodes(step.Selector, &nodes),
 	})
 	if err != nil {
@@ -551,4 +551,12 @@ func (b *BrowserDriver) waitForLoadEvent(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (b *BrowserDriver) getSelectorTypeQueryOptions(selectorType string, opts []chromedp.QueryOption) []chromedp.QueryOption {
+	if selectorType == "JSPath" {
+		opts = append(opts, chromedp.ByJSPath)
+	}
+
+	return opts
 }
