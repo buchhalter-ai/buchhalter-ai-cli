@@ -133,6 +133,10 @@ func (a *DocumentArchive) fileHashExists(hash string) bool {
 	return false
 }
 
+func (a *DocumentArchive) GetFileIndex() map[string]File {
+	return a.fileIndex
+}
+
 func (a *DocumentArchive) determineProviderFromPath(filePath string) string {
 	p := path.Dir(filePath)
 	_, file := filepath.Split(p)
