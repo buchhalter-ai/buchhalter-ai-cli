@@ -16,7 +16,12 @@ type DocumentArchive struct {
 	logger *slog.Logger
 
 	storageDirectory string
-	fileHashes       []string
+	fileIndex        map[string]File
+}
+
+type File struct {
+	Path     string
+	Provider string
 }
 
 func NewDocumentArchive(logger *slog.Logger, archiveDirectory string) *DocumentArchive {
@@ -24,8 +29,7 @@ func NewDocumentArchive(logger *slog.Logger, archiveDirectory string) *DocumentA
 		logger:           logger,
 		storageDirectory: archiveDirectory,
 
-		// TODO Check if this can be replaced by a hashmap for better performance.
-		fileHashes: []string{},
+		fileIndex: map[string]File{},
 	}
 }
 
@@ -49,7 +53,10 @@ func (a *DocumentArchive) BuildArchiveIndex() error {
 			if err != nil {
 				return fmt.Errorf("error computing hash for %s: %w", filePath, err)
 			}
-			a.fileHashes = append(a.fileHashes, hash)
+			a.fileIndex[hash] = File{
+				Path:     filePath,
+				Provider: a.determineProviderFromPath(filePath),
+			}
 		}
 		return nil
 	})
@@ -57,7 +64,7 @@ func (a *DocumentArchive) BuildArchiveIndex() error {
 		return fmt.Errorf("error walking the directory: %w", err)
 	}
 
-	a.logger.Info("Building document archive index ... completed", "files_in_index", len(a.fileHashes))
+	a.logger.Info("Building document archive index ... completed", "files_in_index", len(a.fileIndex))
 
 	return nil
 }
@@ -77,7 +84,10 @@ func (a *DocumentArchive) AddFile(filePath string) error {
 		return err
 	}
 
-	a.fileHashes = append(a.fileHashes, hash)
+	a.fileIndex[hash] = File{
+		Path:     filePath,
+		Provider: a.determineProviderFromPath(filePath),
+	}
 	return nil
 }
 
@@ -112,10 +122,19 @@ func computeHash(filePath string) (string, error) {
 }
 
 func (a *DocumentArchive) fileHashExists(hash string) bool {
-	for _, fh := range a.fileHashes {
-		if fh == hash && hash != "" {
-			return true
-		}
+	if len(hash) == 0 {
+		return false
 	}
+
+	if _, ok := a.fileIndex[hash]; ok {
+		return true
+	}
+
 	return false
+}
+
+func (a *DocumentArchive) determineProviderFromPath(filePath string) string {
+	p := path.Dir(filePath)
+	_, file := filepath.Split(p)
+	return file
 }
