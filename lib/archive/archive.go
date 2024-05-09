@@ -7,7 +7,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 )
 
 type DocumentArchive struct {
@@ -30,14 +32,22 @@ func NewDocumentArchive(logger *slog.Logger, archiveDirectory string) *DocumentA
 func (a *DocumentArchive) BuildArchiveIndex() error {
 	// Iterate over all files in the archive directory and build an index with all existing file hashes.
 	// This index will be used to detect if a downloaded invoice/file is new or already exists.
-	err := filepath.Walk(a.storageDirectory, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(a.storageDirectory, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && info.Name()[0:1] != "_" && info.Name()[0:1] != "." {
-			hash, err := computeHash(path)
+
+		// Exclude `_local` directory
+		localDir := fmt.Sprintf("%s%s_local", a.storageDirectory, string(os.PathSeparator))
+		if strings.Contains(filePath, localDir) {
+			return nil
+		}
+
+		// Exclude directories, hidden files and log files
+		if !info.IsDir() && info.Name()[0:1] != "_" && info.Name()[0:1] != "." && path.Ext(info.Name()) != ".log" {
+			hash, err := computeHash(filePath)
 			if err != nil {
-				return fmt.Errorf("error computing hash for %s: %w", path, err)
+				return fmt.Errorf("error computing hash for %s: %w", filePath, err)
 			}
 			a.fileHashes = append(a.fileHashes, hash)
 		}
