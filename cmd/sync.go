@@ -261,6 +261,45 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		baseCountStep += stepCountInCurrentRecipe
 	}
 
+	// If we have a premium user run, upload the documents to the buchhalter API
+	logger.Info("Checking if we have a premium subscription to Buchhalter API ...")
+	user, err := buchhalterAPIClient.GetAuthenticatedUser()
+	if err != nil {
+		// TODO Implement better error handling
+		logger.Error("Error retrieving authenticated user", "error", err)
+		fmt.Println(err)
+	}
+	if user != nil && len(user.User.ID) > 0 {
+		fileIndex := documentArchive.GetFileIndex()
+		for fileChecksum, fileInfo := range fileIndex {
+			logger.Info("Uploading document to Buchhalter API ...", "file", fileInfo.Path, "checksum", fileChecksum)
+			result, err := buchhalterAPIClient.DoesDocumentExist(fileChecksum)
+			if err != nil {
+				// TODO Implement better error handling
+				logger.Error("Error checking if document exists already in Buchhalter API", "file", fileInfo.Path, "checksum", fileChecksum, "error", err)
+				fmt.Println(err)
+			}
+			// If the file exists already, skip it
+			if result {
+				logger.Info("Uploading document to Buchhalter API ... exists already", "file", fileInfo.Path, "checksum", fileChecksum)
+				continue
+			}
+			logger.Info("Uploading document to Buchhalter API ... does not exist already", "file", fileInfo.Path, "checksum", fileChecksum)
+
+			/*
+				TODO UPLOAD DODUCMENT
+
+				err := buchhalterAPIClient.UploadDocument(fileChecksum, fileInfo)
+				if err != nil {
+					// TODO Implement better error handling
+					logger.Error("Error uploading document to Buchhalter API", "file", f.Path, "error", err)
+					fmt.Println(err)
+				}
+				logger.Info("Uploading document to Buchhalter API ... completed", "file", f.Path)
+			*/
+		}
+	}
+
 	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")
 	if !developmentMode && alwaysSendMetrics {
 		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)

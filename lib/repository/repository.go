@@ -22,11 +22,12 @@ const (
 )
 
 type BuchhalterAPIClient struct {
-	logger          *slog.Logger
-	apiHost         *url.URL
-	apiToken        string
-	configDirectory string
-	userAgent       string
+	logger            *slog.Logger
+	apiHost           *url.URL
+	apiToken          string
+	authenticatedUser AuthenticatedUser
+	configDirectory   string
+	userAgent         string
 }
 
 type Metric struct {
@@ -261,5 +262,63 @@ func (c *BuchhalterAPIClient) GetAuthenticatedUser() (*CliSyncResponse, error) {
 		return nil, err
 	}
 
+	// Store authenticated user
+	c.authenticatedUser = cliSyncResponse.User
+
 	return &cliSyncResponse, nil
+}
+
+func (c *BuchhalterAPIClient) DoesDocumentExist(documentHash string) (bool, error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	ctx := context.Background()
+
+	// TODO How do we select the correct team?
+	// For now we just get the first one
+	teamId := c.authenticatedUser.Teams[0].ID
+
+	requestPayload := struct {
+		FileChecksum string `json:"file_checksum"`
+	}{
+		FileChecksum: documentHash,
+	}
+	jsonRequestPayload, err := json.Marshal(requestPayload)
+	if err != nil {
+		return false, err
+	}
+
+	// TODO Make url configurable
+	u := fmt.Sprintf("https://app.buchhalter.ai/api/cli/%s/check", teamId)
+	c.logger.Info("Checking document existence", "url", u)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(jsonRequestPayload))
+	if err != nil {
+		return false, err
+	}
+
+	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.apiToken))
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("http request to %s failed with status code: %d", u, resp.StatusCode)
+	}
+
+	// TODO CONTINUE HERE WITH CHECKING RESPONSE
+	fmt.Printf("%s\n", resp.Body)
+	/*
+		var cliSyncResponse CliSyncResponse
+		err = json.NewDecoder(resp.Body).Decode(&cliSyncResponse)
+		if err != nil {
+			return nil, err
+		}
+	*/
+
+	return true, nil
 }
