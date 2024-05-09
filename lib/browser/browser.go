@@ -460,10 +460,12 @@ func (b *BrowserDriver) stepMove(step parser.Step, documentArchive *archive.Docu
 				b.logger.Debug("Executing recipe step ... moving file", "action", step.Action, "source", srcFile, "destination", filepath.Join(b.documentsDirectory, d.Name()))
 				b.logger.Info("Moving file", "source", srcFile, "destination", filepath.Join(b.documentsDirectory, d.Name()))
 				b.newFilesCount++
-				_, err := utils.CopyFile(srcFile, filepath.Join(b.documentsDirectory, d.Name()))
+				dstFile := filepath.Join(b.documentsDirectory, d.Name())
+				_, err := utils.CopyFile(srcFile, dstFile)
 				if err != nil {
 					return err
 				}
+				documentArchive.AddFile(dstFile)
 			}
 		}
 		return nil
