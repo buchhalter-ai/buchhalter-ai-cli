@@ -135,6 +135,26 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 		})
 
 		stepResultChan := make(chan utils.StepResult, 1)
+
+		// Check if step should be skipped
+		if step.When.URL != "" {
+			var currentURL string
+			if err := chromedp.Run(ctx, chromedp.Location(&currentURL)); err != nil {
+				// TODO implement better error handling
+				b.logger.Error("Failed to get current URL", "error", err.Error())
+
+				// Skipping step
+				continue
+			}
+
+			// Check if the current URL is not equal to step.When.URL
+			if currentURL != step.When.URL {
+				go func() {
+					stepResultChan <- utils.StepResult{Status: "success"}
+				}()
+			}
+		}
+
 		// Timeout recipe if something goes wrong
 		go func() {
 			switch action := step.Action; action {
@@ -356,10 +376,17 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 		concurrentDownloadsPool <- struct{}{}
 		if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
 			chromedp.MouseClickNode(n),
-			chromedp.WaitVisible(n.FullXPath() + step.Value),
-			chromedp.Click(n.FullXPath() + step.Value),
 		}); err != nil {
 			return utils.StepResult{Status: "error", Message: err.Error()}
+		}
+
+		if step.Value != "" {
+			if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
+				chromedp.WaitVisible(n.FullXPath() + step.Value),
+				chromedp.Click(n.FullXPath() + step.Value),
+			}); err != nil {
+				return utils.StepResult{Status: "error", Message: err.Error()}
+			}
 		}
 
 		// Delay clicks to prevent too many downloads at once/rate limiting
