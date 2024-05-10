@@ -277,7 +277,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			if err != nil {
 				// TODO Implement better error handling
 				logger.Error("Error checking if document exists already in Buchhalter API", "file", fileInfo.Path, "checksum", fileChecksum, "error", err)
-				fmt.Println(err)
+				continue
 			}
 			// If the file exists already, skip it
 			if result {
@@ -286,17 +286,13 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			}
 			logger.Info("Uploading document to Buchhalter API ... does not exist already", "file", fileInfo.Path, "checksum", fileChecksum)
 
-			/*
-				TODO UPLOAD DODUCMENT
-
-				err := buchhalterAPIClient.UploadDocument(fileChecksum, fileInfo)
-				if err != nil {
-					// TODO Implement better error handling
-					logger.Error("Error uploading document to Buchhalter API", "file", f.Path, "error", err)
-					fmt.Println(err)
-				}
-				logger.Info("Uploading document to Buchhalter API ... completed", "file", f.Path)
-			*/
+			err = buchhalterAPIClient.UploadDocument(fileInfo.Path, fileInfo.Provider)
+			if err != nil {
+				// TODO Implement better error handling
+				logger.Error("Error uploading document to Buchhalter API", "file", fileInfo.Path, "provider", fileInfo.Provider, "error", err)
+				continue
+			}
+			panic("TODO")
 		}
 	}
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -68,6 +69,22 @@ type Team struct {
 	Subscription string `json:"subscription"`
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at"`
+}
+
+type DocumentCheckResponse struct {
+	Status string `json:"status"`
+	File   string `json:"file"`
+}
+
+type DocumentUploadResponse struct {
+	Status     string `json:"status"`
+	DocumentID string `json:"document_id"`
+}
+
+type ErrorAPIResponse struct {
+	Status       string `json:"status"`
+	ErrorCode    string `json:"error_code"`
+	ErrorMessage string `json:"error_message"`
 }
 
 func NewBuchhalterAPIClient(logger *slog.Logger, apiHost, configDirectory, apiToken, cliVersion string) (*BuchhalterAPIClient, error) {
@@ -310,15 +327,96 @@ func (c *BuchhalterAPIClient) DoesDocumentExist(documentHash string) (bool, erro
 		return false, fmt.Errorf("http request to %s failed with status code: %d", u, resp.StatusCode)
 	}
 
-	// TODO CONTINUE HERE WITH CHECKING RESPONSE
-	fmt.Printf("%s\n", resp.Body)
-	/*
-		var cliSyncResponse CliSyncResponse
-		err = json.NewDecoder(resp.Body).Decode(&cliSyncResponse)
-		if err != nil {
-			return nil, err
-		}
-	*/
+	var checkResponse DocumentCheckResponse
+	err = json.NewDecoder(resp.Body).Decode(&checkResponse)
+	if err != nil {
+		return false, err
+	}
+
+	if checkResponse.Status == "new" {
+		return false, nil
+	}
 
 	return true, nil
+}
+
+func (c *BuchhalterAPIClient) UploadDocument(filePath, provider string) error {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	ctx := context.Background()
+
+	// Prepare a form that you will submit to that URL.
+	var b bytes.Buffer
+	w := multipart.NewWriter(&b)
+
+	fileName := filepath.Base(filePath)
+
+	// Add file to request
+	fileWriter, err := w.CreateFormFile("file", fileName)
+	if err != nil {
+		return err
+	}
+	fileHandle, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer fileHandle.Close()
+	_, err = io.Copy(fileWriter, fileHandle)
+	if err != nil {
+		return err
+	}
+
+	// Add provider to request
+	supplierWriter, err := w.CreateFormField("supplier")
+	if err != nil {
+		return err
+	}
+	buf := bytes.NewBufferString(provider)
+	if _, err = io.Copy(supplierWriter, buf); err != nil {
+		return err
+	}
+
+	// TODO How do we select the correct team?
+	// For now we just get the first one
+	teamId := c.authenticatedUser.Teams[0].ID
+
+	// TODO Make url configurable
+	u := fmt.Sprintf("https://app.buchhalter.ai/api/cli/%s/upload", teamId)
+	c.logger.Info("Upload document to API", "url", u, "file", filePath, "provider", provider)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, &b)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Accept", "application/json")
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.apiToken))
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResponse ErrorAPIResponse
+		err = json.NewDecoder(resp.Body).Decode(&errorResponse)
+		if err != nil {
+			return err
+		}
+
+		c.logger.Error("Upload document to API ... failed", "url", u, "file", filePath, "provider", provider, "status_code", resp.StatusCode, "error_code", errorResponse.ErrorCode, "error_message", errorResponse.ErrorMessage)
+		return fmt.Errorf("http request to %s failed with status code: %d (code: %s, message %s)", u, resp.StatusCode, errorResponse.ErrorCode, errorResponse.ErrorMessage)
+	}
+
+	var uploadResponse DocumentUploadResponse
+	err = json.NewDecoder(resp.Body).Decode(&uploadResponse)
+	if err != nil {
+		return err
+	}
+
+	c.logger.Info("Upload document to API ... success", "url", u, "file", filePath, "provider", provider, "status_code", resp.StatusCode, "status", uploadResponse.Status, "document_id", uploadResponse.DocumentID)
+
+	return nil
 }
