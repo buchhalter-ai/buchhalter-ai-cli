@@ -140,7 +140,11 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 		if step.When.URL != "" {
 			var currentURL string
 			if err := chromedp.Run(ctx, chromedp.Location(&currentURL)); err != nil {
-				// handle error
+				// TODO implement better error handling
+				b.logger.Error("Failed to get current URL", "error", err.Error())
+
+				// Skipping step
+				continue
 			}
 
 			// Check if the current URL is not equal to step.When.URL
@@ -385,7 +389,7 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 			}
 		}
 
-    // Delay clicks to prevent too many downloads at once/rate limiting
+		// Delay clicks to prevent too many downloads at once/rate limiting
 		time.Sleep(1500 * time.Millisecond)
 		x++
 	}
