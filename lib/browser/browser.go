@@ -45,12 +45,13 @@ type BrowserDriver struct {
 	downloadsDirectory string
 	documentsDirectory string
 
-	browserCtx    context.Context
-	recipeTimeout time.Duration
-	newFilesCount int
+	browserCtx         context.Context
+	recipeTimeout      time.Duration
+	maxFilesDownloaded int
+	newFilesCount      int
 }
 
-func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterDirectory string, documentArchive *archive.DocumentArchive) *BrowserDriver {
+func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterDirectory string, documentArchive *archive.DocumentArchive, maxFilesDownloaded int) *BrowserDriver {
 	return &BrowserDriver{
 		logger:          logger,
 		credentials:     credentials,
@@ -58,9 +59,10 @@ func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchh
 
 		buchhalterDirectory: buchhalterDirectory,
 
-		browserCtx:    context.Background(),
-		recipeTimeout: 60 * time.Second,
-		newFilesCount: 0,
+		browserCtx:         context.Background(),
+		recipeTimeout:      60 * time.Second,
+		maxFilesDownloaded: maxFilesDownloaded,
+		newFilesCount:      0,
 	}
 }
 
@@ -325,7 +327,7 @@ func (b *BrowserDriver) stepWaitFor(ctx context.Context, step parser.Step) utils
 }
 
 func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
-	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector)
+	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector, "buchhalter_max_download_files_per_receipt", b.maxFilesDownloaded)
 
 	var nodes []*cdp.Node
 	err := chromedp.Run(ctx, chromedp.Tasks{
@@ -336,36 +338,38 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
 
+	// Limit nodes to 2 to prevent too many downloads at once/rate limiting
+	concurrentDownloadsPool := make(chan struct{}, 2)
 	wg := &sync.WaitGroup{}
 	chromedp.ListenTarget(ctx, func(v interface{}) {
 		switch ev := v.(type) {
 		case *browser.EventDownloadWillBegin:
 			b.logger.Debug("Executing recipe step ... download begins", "action", step.Action, "guid", ev.GUID, "url", ev.URL)
 		case *browser.EventDownloadProgress:
-			if ev.State == browser.DownloadProgressStateCompleted {
-				b.logger.Debug("Executing recipe step ... download completed", "action", step.Action, "guid", ev.GUID)
-				go func() {
-					wg.Done()
-				}()
+			switch ev.State {
+			case browser.DownloadProgressStateCompleted:
+				b.logger.Debug("Executing recipe step ... download completed", "action", step.Action, "guid", ev.GUID, "received_bytes", ev.ReceivedBytes)
+				<-concurrentDownloadsPool
+				wg.Done()
+			case browser.DownloadProgressStateCanceled:
+				b.logger.Debug("Executing recipe step ... download cancelled", "action", step.Action, "guid", ev.GUID, "received_bytes", ev.ReceivedBytes)
+				<-concurrentDownloadsPool
+				wg.Done()
 			}
 		}
 	})
 
-	// Click on link (for client-side js stuff)
-	// Limit nodes to 2 to prevent too many downloads at once/rate limiting
-	dl := len(nodes)
-	if dl > 2 {
-		dl = 2
-	}
-	wg.Add(dl)
+	// Click on download link (for client-side js stuff)
 	x := 0
 	for _, n := range nodes {
-		// TODO: We only download the latest two files for now. This should be configurable in the future.
-		if x >= 2 {
+		// Only download maxFilesDownloaded files
+		if b.maxFilesDownloaded > 0 && x >= b.maxFilesDownloaded {
 			break
 		}
 
 		b.logger.Debug("Executing recipe step ... trigger download click", "action", step.Action, "selector", n.FullXPath()+step.Value)
+		wg.Add(1)
+		concurrentDownloadsPool <- struct{}{}
 		if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
 			chromedp.MouseClickNode(n),
 		}); err != nil {
@@ -380,11 +384,13 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 				return utils.StepResult{Status: "error", Message: err.Error()}
 			}
 		}
-		// Delay clicks to prevent too many downloads at once/rate limiting
+
+    // Delay clicks to prevent too many downloads at once/rate limiting
 		time.Sleep(1500 * time.Millisecond)
 		x++
 	}
 	wg.Wait()
+	close(concurrentDownloadsPool)
 
 	b.logger.Debug("Executing recipe step ... downloads completed", "action", step.Action)
 	b.logger.Info("All downloads completed")
@@ -423,6 +429,7 @@ func (b *BrowserDriver) stepMove(step parser.Step, documentArchive *archive.Docu
 		if e != nil {
 			return e
 		}
+		b.logger.Debug("Matching filenames", "action", step.Action, "value", step.Value, "filename", d.Name())
 		match, e := regexp.MatchString(step.Value, d.Name())
 		if e != nil {
 			return e
