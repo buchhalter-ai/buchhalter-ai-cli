@@ -465,7 +465,10 @@ func (b *BrowserDriver) stepMove(step parser.Step, documentArchive *archive.Docu
 				if err != nil {
 					return err
 				}
-				documentArchive.AddFile(dstFile)
+				err = documentArchive.AddFile(dstFile)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		return nil

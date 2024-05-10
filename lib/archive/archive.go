@@ -75,9 +75,10 @@ func (a *DocumentArchive) FileExists(filePath string) bool {
 }
 
 func (a *DocumentArchive) AddFile(filePath string) error {
-	if a.fileHashExists(filePath) {
-		return fmt.Errorf("file %s already exists in archive", filePath)
-	}
+	// Right now, we overwrite the file if it exists already
+	// if a.fileHashExists(filePath) {
+	// 	return fmt.Errorf("file %s already exists in archive", filePath)
+	// }
 
 	hash, err := computeHash(filePath)
 	if err != nil {
