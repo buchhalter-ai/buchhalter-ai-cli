@@ -554,8 +554,22 @@ func (b *BrowserDriver) waitForLoadEvent(ctx context.Context) error {
 }
 
 func (b *BrowserDriver) getSelectorTypeQueryOptions(selectorType string, opts []chromedp.QueryOption) []chromedp.QueryOption {
-	if selectorType == "JSPath" {
+	switch selectorType {
+	case "JSPath":
 		opts = append(opts, chromedp.ByJSPath)
+	case "Search":
+		opts = append(opts, chromedp.BySearch)
+	case "Query":
+		opts = append(opts, chromedp.ByQuery)
+	// Possible future options - Not implemented right now, as they are not needed
+	// case "Func":
+	// 	opts = append(opts, chromedp.ByFunc)
+	case "ID":
+		opts = append(opts, chromedp.ByID)
+	case "NodeID":
+		opts = append(opts, chromedp.ByNodeID)
+	case "QueryAll":
+		opts = append(opts, chromedp.ByQueryAll)
 	}
 
 	return opts
