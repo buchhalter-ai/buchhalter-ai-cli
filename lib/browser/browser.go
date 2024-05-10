@@ -287,8 +287,13 @@ func (b *BrowserDriver) stepRemoveElement(ctx context.Context, step parser.Step)
 func (b *BrowserDriver) stepClick(ctx context.Context, step parser.Step) utils.StepResult {
 	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector)
 
+	opts := []chromedp.QueryOption{
+		chromedp.NodeReady,
+	}
+	opts = b.getSelectorTypeQueryOptions(step.SelectorType, opts)
+
 	if err := chromedp.Run(ctx,
-		chromedp.Click(step.Selector, chromedp.NodeReady),
+		chromedp.Click(step.Selector, opts...),
 	); err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
@@ -299,8 +304,14 @@ func (b *BrowserDriver) stepType(ctx context.Context, step parser.Step, credenti
 	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector, "value", step.Value)
 
 	step.Value = b.parseCredentialPlaceholders(step.Value, credentials)
+
+	opts := []chromedp.QueryOption{
+		chromedp.NodeReady,
+	}
+	opts = b.getSelectorTypeQueryOptions(step.SelectorType, opts)
+
 	if err := chromedp.Run(ctx,
-		chromedp.SendKeys(step.Selector, step.Value, chromedp.NodeReady),
+		chromedp.SendKeys(step.Selector, step.Value, opts...),
 	); err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
@@ -322,8 +333,10 @@ func (b *BrowserDriver) stepSleep(ctx context.Context, step parser.Step) utils.S
 func (b *BrowserDriver) stepWaitFor(ctx context.Context, step parser.Step) utils.StepResult {
 	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector)
 
+	opts := []chromedp.QueryOption{}
+	opts = b.getSelectorTypeQueryOptions(step.SelectorType, opts)
 	if err := chromedp.Run(ctx,
-		chromedp.WaitReady(step.Selector),
+		chromedp.WaitReady(step.Selector, opts...),
 	); err != nil {
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
@@ -333,9 +346,11 @@ func (b *BrowserDriver) stepWaitFor(ctx context.Context, step parser.Step) utils
 func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector, "buchhalter_max_download_files_per_receipt", b.maxFilesDownloaded)
 
+	opts := []chromedp.QueryOption{}
+	opts = b.getSelectorTypeQueryOptions(step.SelectorType, opts)
 	var nodes []*cdp.Node
 	err := chromedp.Run(ctx, chromedp.Tasks{
-		chromedp.WaitReady(step.Selector),
+		chromedp.WaitReady(step.Selector, opts...),
 		chromedp.Nodes(step.Selector, &nodes),
 	})
 	if err != nil {
@@ -563,4 +578,26 @@ func (b *BrowserDriver) waitForLoadEvent(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (b *BrowserDriver) getSelectorTypeQueryOptions(selectorType string, opts []chromedp.QueryOption) []chromedp.QueryOption {
+	switch selectorType {
+	case "JSPath":
+		opts = append(opts, chromedp.ByJSPath)
+	case "Search":
+		opts = append(opts, chromedp.BySearch)
+	case "Query":
+		opts = append(opts, chromedp.ByQuery)
+	// Possible future options - Not implemented right now, as they are not needed
+	// case "Func":
+	// 	opts = append(opts, chromedp.ByFunc)
+	case "ID":
+		opts = append(opts, chromedp.ByID)
+	case "NodeID":
+		opts = append(opts, chromedp.ByNodeID)
+	case "QueryAll":
+		opts = append(opts, chromedp.ByQueryAll)
+	}
+
+	return opts
 }
