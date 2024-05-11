@@ -347,33 +347,44 @@ func (c *BuchhalterAPIClient) UploadDocument(filePath, provider string) error {
 	ctx := context.Background()
 
 	// Prepare a form that you will submit to that URL.
-	var b bytes.Buffer
-	w := multipart.NewWriter(&b)
+	body := new(bytes.Buffer)
+	writer := multipart.NewWriter(body)
 
 	fileName := filepath.Base(filePath)
 
 	// Add file to request
-	fileWriter, err := w.CreateFormFile("file", fileName)
+	fileWriter, err := writer.CreateFormFile("file", fileName)
 	if err != nil {
+		c.logger.Error("Error creating form `file`", "file", fileName, "error", err)
 		return err
 	}
 	fileHandle, err := os.Open(filePath)
 	if err != nil {
+		c.logger.Error("Error opening file", "file", fileName, "error", err)
 		return err
 	}
 	defer fileHandle.Close()
 	_, err = io.Copy(fileWriter, fileHandle)
 	if err != nil {
+		c.logger.Error("Error copying file", "file", fileName, "error", err)
 		return err
 	}
 
 	// Add provider to request
-	supplierWriter, err := w.CreateFormField("supplier")
+	supplierWriter, err := writer.CreateFormField("supplier")
 	if err != nil {
+		c.logger.Error("Error creating form `supplier`", "provider", provider, "error", err)
 		return err
 	}
 	buf := bytes.NewBufferString(provider)
 	if _, err = io.Copy(supplierWriter, buf); err != nil {
+		c.logger.Error("Error copying provider", "provider", provider, "error", err)
+		return err
+	}
+
+	err = writer.Close()
+	if err != nil {
+		c.logger.Error("Error closing writer", "error", err)
 		return err
 	}
 
@@ -384,17 +395,19 @@ func (c *BuchhalterAPIClient) UploadDocument(filePath, provider string) error {
 	// TODO Make url configurable
 	u := fmt.Sprintf("https://app.buchhalter.ai/api/cli/%s/upload", teamId)
 	c.logger.Info("Upload document to API", "url", u, "file", filePath, "provider", provider)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, &b)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, body)
 	if err != nil {
+		c.logger.Error("Error creating request", "url", u, "file", filePath, "provider", provider, "error", err)
 		return err
 	}
 
 	req.Header.Set("User-Agent", c.userAgent)
-	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Accept", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.apiToken))
 	resp, err := client.Do(req)
 	if err != nil {
+		c.logger.Error("Error sending request", "url", u, "file", filePath, "provider", provider, "error", err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -403,6 +416,7 @@ func (c *BuchhalterAPIClient) UploadDocument(filePath, provider string) error {
 		var errorResponse ErrorAPIResponse
 		err = json.NewDecoder(resp.Body).Decode(&errorResponse)
 		if err != nil {
+			c.logger.Error("Error decoding error response", "url", u, "file", filePath, "provider", provider, "status_code", resp.StatusCode, "error", err)
 			return err
 		}
 
@@ -413,6 +427,7 @@ func (c *BuchhalterAPIClient) UploadDocument(filePath, provider string) error {
 	var uploadResponse DocumentUploadResponse
 	err = json.NewDecoder(resp.Body).Decode(&uploadResponse)
 	if err != nil {
+		c.logger.Error("Error decoding upload response", "url", u, "file", filePath, "provider", provider, "error", err)
 		return err
 	}
 

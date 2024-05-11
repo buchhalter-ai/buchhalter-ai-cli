@@ -292,7 +292,6 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 				logger.Error("Error uploading document to Buchhalter API", "file", fileInfo.Path, "provider", fileInfo.Provider, "error", err)
 				continue
 			}
-			panic("TODO")
 		}
 	}
 
