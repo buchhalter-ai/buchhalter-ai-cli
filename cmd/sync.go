@@ -272,6 +272,12 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	if user != nil && len(user.User.ID) > 0 {
 		fileIndex := documentArchive.GetFileIndex()
 		for fileChecksum, fileInfo := range fileIndex {
+			// If the user is only working on a specific provider, skip the upload of documents for other providers
+			if len(provider) > 0 && fileInfo.Provider != provider {
+				logger.Info("Skipping document upload to Buchhalter API due to mismatch in provider", "file", fileInfo.Path, "selected_provider", provider, "file_provider", fileInfo.Provider)
+				continue
+			}
+
 			logger.Info("Uploading document to Buchhalter API ...", "file", fileInfo.Path, "checksum", fileChecksum)
 			result, err := buchhalterAPIClient.DoesDocumentExist(fileChecksum)
 			if err != nil {
