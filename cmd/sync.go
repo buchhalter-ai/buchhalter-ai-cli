@@ -270,6 +270,14 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		fmt.Println(err)
 	}
 	if user != nil && len(user.User.ID) > 0 {
+		uiDocumentUploadMessage := "Uploading documents to Buchhalter API ..."
+		if len(provider) > 0 {
+			uiDocumentUploadMessage = fmt.Sprintf("Uploading documents of provider %s to Buchhalter API ...", provider)
+		}
+		p.Send(viewMsgStatusUpdate{
+			title:    uiDocumentUploadMessage,
+			hasError: false,
+		})
 		fileIndex := documentArchive.GetFileIndex()
 		for fileChecksum, fileInfo := range fileIndex {
 			// If the user is only working on a specific provider, skip the upload of documents for other providers
