@@ -91,16 +91,14 @@ func initConfig() {
 	buchhalterDir := filepath.Join(homeDir, "buchhalter")
 
 	// Set default values for viper config
+	// TODO Verify if all of these settings are documented
 	viper.SetDefault("credential_provider_cli_command", "")
 	viper.SetDefault("credential_provider_vault", "Base")
 	viper.SetDefault("credential_provider_item_tag", "buchhalter-ai")
 	viper.SetDefault("buchhalter_directory", buchhalterDir)
 	viper.SetDefault("buchhalter_config_directory", buchhalterConfigDir)
 	viper.SetDefault("buchhalter_max_download_files_per_receipt", 2)
-	viper.SetDefault("buchhalter_repository_url", "https://app.buchhalter.ai/api/cli/repository")
-	viper.SetDefault("buchhalter_metrics_url", "https://app.buchhalter.ai/api/cli/metrics")
-	// TODO document setting
-	viper.SetDefault("buchhalter_user_auth_url", "https://app.buchhalter.ai/api/cli/sync")
+	viper.SetDefault("buchhalter_api_host", "https://app.buchhalter.ai/")
 	viper.SetDefault("buchhalter_always_send_metrics", false)
 	viper.SetDefault("dev", false)
 

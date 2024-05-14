@@ -60,9 +60,7 @@ The following settings are available for configuration:
 
 | `buchhalter_max_download_files_per_receipt`     | Int | `2`                                   | Download only the latest 2 invoices per receipt and ignore the rest. `0` means all invoices. |
 | `buchhalter_config_directory`    | String | `~/.buchhalter/`                                  | Directory to store the buchhalter configuration. |
-| `buchhalter_repository_url`      | String | `https://app.buchhalter.ai/api/cli/repository`    | API endpoint to download the latest OICDB invoice recipes. |
-| `buchhalter_metrics_url`         | String | `https://app.buchhalter.ai/api/cli/metrics`       | API endpoint to send usage metrics. Disabled by default. Needs user agreement. |
-| `buchhalter_always_send_metrics` | Bool   | `false`       | Activate / deactivate sending usage metrics to `buchhalter_metrics_url`. |
+| `buchhalter_always_send_metrics` | Bool   | `false`       | Activate / deactivate sending usage metrics to Buchhalter API. |
 | `dev`                            | Bool   | `false`       | Activate / deactivate development mode for _buchhalter-cli_ (without updates and sending metrics). |
 
 The configuration file is in YAML format.

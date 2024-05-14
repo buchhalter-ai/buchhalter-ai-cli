@@ -91,9 +91,13 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		os.Exit(1)
 	}
 
-	repositoryUrl := viper.GetString("buchhalter_repository_url")
-	metricsUrl := viper.GetString("buchhalter_metrics_url")
-	buchhalterAPIClient := repository.NewBuchhalterAPIClient(logger, buchhalterConfigDirectory, repositoryUrl, metricsUrl, "", CliVersion)
+	apiHost := viper.GetString("buchhalter_api_host")
+	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, CliVersion)
+	if err != nil {
+		logger.Error("Error initializing Buchhalter API client", "error", err)
+		fmt.Printf("Error initializing Buchhalter API client: %s\n", err)
+		os.Exit(1)
+	}
 
 	viewModel := initialModel(logger, vaultProvider, buchhalterAPIClient, recipeParser)
 	p := tea.NewProgram(viewModel)
