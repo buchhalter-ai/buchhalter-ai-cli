@@ -92,7 +92,8 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 
 	apiHost := viper.GetString("buchhalter_api_host")
-	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, CliVersion)
+	apiToken := viper.GetString("buchhalter_api_token")
+	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiToken, CliVersion)
 	if err != nil {
 		logger.Error("Error initializing Buchhalter API client", "error", err)
 		fmt.Printf("Error initializing Buchhalter API client: %s\n", err)
@@ -258,6 +259,54 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		logger.Info("Downloading invoices ... completed", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type, "duration", time.Since(startTime), "new_files", recipeResult.NewFilesCount)
 
 		baseCountStep += stepCountInCurrentRecipe
+	}
+
+	// If we have a premium user run, upload the documents to the buchhalter API
+	logger.Info("Checking if we have a premium subscription to Buchhalter API ...")
+	user, err := buchhalterAPIClient.GetAuthenticatedUser()
+	if err != nil {
+		// TODO Implement better error handling
+		logger.Error("Error retrieving authenticated user", "error", err)
+		fmt.Println(err)
+	}
+	if user != nil && len(user.User.ID) > 0 {
+		uiDocumentUploadMessage := "Uploading documents to Buchhalter API ..."
+		if len(provider) > 0 {
+			uiDocumentUploadMessage = fmt.Sprintf("Uploading documents of provider %s to Buchhalter API ...", provider)
+		}
+		p.Send(viewMsgStatusUpdate{
+			title:    uiDocumentUploadMessage,
+			hasError: false,
+		})
+		fileIndex := documentArchive.GetFileIndex()
+		for fileChecksum, fileInfo := range fileIndex {
+			// If the user is only working on a specific provider, skip the upload of documents for other providers
+			if len(provider) > 0 && fileInfo.Provider != provider {
+				logger.Info("Skipping document upload to Buchhalter API due to mismatch in provider", "file", fileInfo.Path, "selected_provider", provider, "file_provider", fileInfo.Provider)
+				continue
+			}
+
+			logger.Info("Uploading document to Buchhalter API ...", "file", fileInfo.Path, "checksum", fileChecksum)
+			result, err := buchhalterAPIClient.DoesDocumentExist(fileChecksum)
+			if err != nil {
+				// TODO Implement better error handling
+				logger.Error("Error checking if document exists already in Buchhalter API", "file", fileInfo.Path, "checksum", fileChecksum, "error", err)
+				continue
+			}
+			// If the file exists already, skip it
+			if result {
+				logger.Info("Uploading document to Buchhalter API ... exists already", "file", fileInfo.Path, "checksum", fileChecksum)
+				continue
+			}
+			logger.Info("Uploading document to Buchhalter API ... does not exist already", "file", fileInfo.Path, "checksum", fileChecksum)
+
+			err = buchhalterAPIClient.UploadDocument(fileInfo.Path, fileInfo.Provider)
+			if err != nil {
+				// TODO Implement better error handling
+				logger.Error("Error uploading document to Buchhalter API", "file", fileInfo.Path, "provider", fileInfo.Provider, "error", err)
+				continue
+			}
+		}
 	}
 
 	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")

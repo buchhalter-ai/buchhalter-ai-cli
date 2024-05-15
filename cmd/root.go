@@ -4,12 +4,13 @@ Copyright © 2023 buchhalter.ai <support@buchhalter.ai>
 package cmd
 
 import (
-	"buchhalter/lib/utils"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+
+	"buchhalter/lib/utils"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/uuid"
@@ -89,6 +90,7 @@ func initConfig() {
 	buchhalterConfigDir := filepath.Join(homeDir, ".buchhalter")
 	configFile := filepath.Join(buchhalterConfigDir, ".buchhalter.yaml")
 	buchhalterDir := filepath.Join(homeDir, "buchhalter")
+	apiTokenFile := filepath.Join(buchhalterConfigDir, ".buchhalter-api-token")
 
 	// Set default values for viper config
 	// TODO Verify if all of these settings are documented
@@ -99,6 +101,7 @@ func initConfig() {
 	viper.SetDefault("buchhalter_config_directory", buchhalterConfigDir)
 	viper.SetDefault("buchhalter_max_download_files_per_receipt", 2)
 	viper.SetDefault("buchhalter_api_host", "https://app.buchhalter.ai/")
+	viper.SetDefault("buchhalter_api_token", "")
 	viper.SetDefault("buchhalter_always_send_metrics", false)
 	viper.SetDefault("dev", false)
 
@@ -125,6 +128,16 @@ func initConfig() {
 	if err != nil {
 		fmt.Println("Error reading config file:", err)
 		os.Exit(1)
+	}
+
+	// Read API Token
+	if _, err := os.Stat(apiTokenFile); err == nil {
+		apiToken, err := os.ReadFile(apiTokenFile)
+		if err != nil {
+			fmt.Println("Error reading api token file:", err)
+			os.Exit(1)
+		}
+		viper.Set("buchhalter_api_token", string(apiToken))
 	}
 
 	// Create main directory if not exists

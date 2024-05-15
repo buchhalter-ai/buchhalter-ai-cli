@@ -74,7 +74,7 @@ func RunConnectCommand(cmd *cobra.Command, cmdArgs []string) {
 	// Making API call
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 	apiHost := viper.GetString("buchhalter_api_host")
-	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, CliVersion)
+	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiToken, CliVersion)
 	if err != nil {
 		logger.Error("Error initializing Buchhalter API client", "error", err)
 		fmt.Printf("Error initializing Buchhalter API client: %s\n", err)
@@ -82,7 +82,7 @@ func RunConnectCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 
 	logger.Info("Making API call")
-	cliSyncResponse, err := buchhalterAPIClient.GetAuthenticatedUser(apiToken)
+	cliSyncResponse, err := buchhalterAPIClient.GetAuthenticatedUser()
 	fmt.Println("")
 	if err != nil {
 		logger.Error("GetAuthenticatedUser API call not successful input could not be read", "error", err)

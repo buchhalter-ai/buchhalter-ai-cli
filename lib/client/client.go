@@ -417,9 +417,14 @@ func (b *ClientAuthBrowserDriver) stepOauth2PostAndGetItems(ctx context.Context,
 			}
 			if !documentArchive.FileExists(f) {
 				b.newFilesCount++
-				_, err := utils.CopyFile(f, filepath.Join(b.documentsDirectory, filename))
+				dstFile := filepath.Join(b.documentsDirectory, filename)
+				_, err := utils.CopyFile(f, dstFile)
 				if err != nil {
 					return utils.StepResult{Status: "error", Message: "Error while copying file: " + err.Error()}
+				}
+				err = documentArchive.AddFile(dstFile)
+				if err != nil {
+					return utils.StepResult{Status: "error", Message: "Error while adding file " + dstFile + " to document archive: " + err.Error()}
 				}
 			}
 			n++

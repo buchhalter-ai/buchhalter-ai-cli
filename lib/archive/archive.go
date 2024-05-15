@@ -7,14 +7,21 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 )
 
 type DocumentArchive struct {
 	logger *slog.Logger
 
 	storageDirectory string
-	fileHashes       []string
+	fileIndex        map[string]File
+}
+
+type File struct {
+	Path     string
+	Provider string
 }
 
 func NewDocumentArchive(logger *slog.Logger, archiveDirectory string) *DocumentArchive {
@@ -22,24 +29,34 @@ func NewDocumentArchive(logger *slog.Logger, archiveDirectory string) *DocumentA
 		logger:           logger,
 		storageDirectory: archiveDirectory,
 
-		// TODO Check if this can be replaced by a hashmap for better performance.
-		fileHashes: []string{},
+		fileIndex: map[string]File{},
 	}
 }
 
 func (a *DocumentArchive) BuildArchiveIndex() error {
 	// Iterate over all files in the archive directory and build an index with all existing file hashes.
 	// This index will be used to detect if a downloaded invoice/file is new or already exists.
-	err := filepath.Walk(a.storageDirectory, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(a.storageDirectory, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && info.Name()[0:1] != "_" && info.Name()[0:1] != "." {
-			hash, err := computeHash(path)
+
+		// Exclude `_local` directory
+		localDir := fmt.Sprintf("%s%s_local", a.storageDirectory, string(os.PathSeparator))
+		if strings.Contains(filePath, localDir) {
+			return nil
+		}
+
+		// Exclude directories, hidden files and log files
+		if !info.IsDir() && info.Name()[0:1] != "_" && info.Name()[0:1] != "." && path.Ext(info.Name()) != ".log" {
+			hash, err := computeHash(filePath)
 			if err != nil {
-				return fmt.Errorf("error computing hash for %s: %w", path, err)
+				return fmt.Errorf("error computing hash for %s: %w", filePath, err)
 			}
-			a.fileHashes = append(a.fileHashes, hash)
+			a.fileIndex[hash] = File{
+				Path:     filePath,
+				Provider: a.determineProviderFromPath(filePath),
+			}
 		}
 		return nil
 	})
@@ -47,7 +64,7 @@ func (a *DocumentArchive) BuildArchiveIndex() error {
 		return fmt.Errorf("error walking the directory: %w", err)
 	}
 
-	a.logger.Info("Building document archive index ... completed", "files_in_index", len(a.fileHashes))
+	a.logger.Info("Building document archive index ... completed", "files_in_index", len(a.fileIndex))
 
 	return nil
 }
@@ -55,6 +72,24 @@ func (a *DocumentArchive) BuildArchiveIndex() error {
 func (a *DocumentArchive) FileExists(filePath string) bool {
 	hash, _ := computeHash(filePath)
 	return a.fileHashExists(hash)
+}
+
+func (a *DocumentArchive) AddFile(filePath string) error {
+	// Right now, we overwrite the file if it exists already
+	// if a.fileHashExists(filePath) {
+	// 	return fmt.Errorf("file %s already exists in archive", filePath)
+	// }
+
+	hash, err := computeHash(filePath)
+	if err != nil {
+		return err
+	}
+
+	a.fileIndex[hash] = File{
+		Path:     filePath,
+		Provider: a.determineProviderFromPath(filePath),
+	}
+	return nil
 }
 
 func computeHash(filePath string) (string, error) {
@@ -88,10 +123,23 @@ func computeHash(filePath string) (string, error) {
 }
 
 func (a *DocumentArchive) fileHashExists(hash string) bool {
-	for _, fh := range a.fileHashes {
-		if fh == hash && hash != "" {
-			return true
-		}
+	if len(hash) == 0 {
+		return false
 	}
+
+	if _, ok := a.fileIndex[hash]; ok {
+		return true
+	}
+
 	return false
+}
+
+func (a *DocumentArchive) GetFileIndex() map[string]File {
+	return a.fileIndex
+}
+
+func (a *DocumentArchive) determineProviderFromPath(filePath string) string {
+	p := path.Dir(filePath)
+	_, file := filepath.Split(p)
+	return file
 }
