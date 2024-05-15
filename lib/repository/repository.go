@@ -8,20 +8,26 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
 )
 
+const (
+	repositoryAPIEndpoint = "/api/cli/repository"
+	metricsAPIEndpoint    = "/api/cli/metrics"
+	userAuthAPIEndpoint   = "/api/cli/sync"
+)
+
 type BuchhalterAPIClient struct {
 	logger *slog.Logger
 
 	configDirectory string
-	repositoryUrl   string
-	metricsUrl      string
-	userAuthUrl     string
-	userAgent       string
+
+	apiHost   *url.URL
+	userAgent string
 }
 
 type Metric struct {
@@ -64,19 +70,24 @@ type Team struct {
 	UpdatedAt    string `json:"updated_at"`
 }
 
-func NewBuchhalterAPIClient(logger *slog.Logger, configDirectory, repositoryUrl, metricsUrl, userAuthUrl, cliVersion string) *BuchhalterAPIClient {
-	return &BuchhalterAPIClient{
+func NewBuchhalterAPIClient(logger *slog.Logger, apiHost, configDirectory, cliVersion string) (*BuchhalterAPIClient, error) {
+	u, err := url.Parse(apiHost)
+	if err != nil {
+		return nil, err
+	}
+
+	c := &BuchhalterAPIClient{
 		logger:          logger,
 		configDirectory: configDirectory,
-		repositoryUrl:   repositoryUrl,
-		metricsUrl:      metricsUrl,
-		userAuthUrl:     userAuthUrl,
+		apiHost:         u,
 		userAgent:       fmt.Sprintf("buchhalter-cli/%s", cliVersion),
 	}
+
+	return c, nil
 }
 
 func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
-	updateExists, err := c.updateExists(c.repositoryUrl, currentChecksum)
+	updateExists, err := c.updateExists(currentChecksum)
 	if err != nil {
 		return fmt.Errorf("you're offline - please connect to the internet for using buchhalter-cli: %w", err)
 	}
@@ -87,7 +98,11 @@ func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
 			Timeout: 10 * time.Second,
 		}
 		ctx := context.Background()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.repositoryUrl, nil)
+		apiUrl, err := url.JoinPath(c.apiHost.String(), repositoryAPIEndpoint)
+		if err != nil {
+			return err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiUrl, nil)
 		if err != nil {
 			return err
 		}
@@ -117,18 +132,22 @@ func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
 			c.logger.Info("Starting to update the local OICDB repository ... completed", "database", fileToUpdate, "bytes_written", bytesCopied)
 			return nil
 		}
-		return fmt.Errorf("http request to %s failed with status code: %d", c.repositoryUrl, resp.StatusCode)
+		return fmt.Errorf("http request to %s failed with status code: %d", apiUrl, resp.StatusCode)
 	}
 
 	return nil
 }
 
-func (c *BuchhalterAPIClient) updateExists(repositoryUrl, currentChecksum string) (bool, error) {
+func (c *BuchhalterAPIClient) updateExists(currentChecksum string) (bool, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, repositoryUrl, nil)
+	apiUrl, err := url.JoinPath(c.apiHost.String(), repositoryAPIEndpoint)
+	if err != nil {
+		return false, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, apiUrl, nil)
 	if err != nil {
 		return false, err
 	}
@@ -157,7 +176,7 @@ func (c *BuchhalterAPIClient) updateExists(repositoryUrl, currentChecksum string
 		return false, fmt.Errorf("update failed with checksum mismatch")
 	}
 
-	return false, fmt.Errorf("http request to %s failed with status code: %d", repositoryUrl, resp.StatusCode)
+	return false, fmt.Errorf("http request to %s failed with status code: %d", apiUrl, resp.StatusCode)
 }
 
 func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVersion, vaultVersion, oicdbVersion string) error {
@@ -182,7 +201,11 @@ func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVer
 
 	client := &http.Client{}
 	ctx := context.Background() // Consider using a meaningful context
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.metricsUrl, bytes.NewBuffer(mdj))
+	apiUrl, err := url.JoinPath(c.apiHost.String(), metricsAPIEndpoint)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiUrl, bytes.NewBuffer(mdj))
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
@@ -201,7 +224,7 @@ func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVer
 		return nil
 	}
 
-	return fmt.Errorf("http request to %s failed with status code: %d", c.metricsUrl, resp.StatusCode)
+	return fmt.Errorf("http request to %s failed with status code: %d", apiUrl, resp.StatusCode)
 }
 
 func (c *BuchhalterAPIClient) GetAuthenticatedUser(apiToken string) (*CliSyncResponse, error) {
@@ -209,7 +232,11 @@ func (c *BuchhalterAPIClient) GetAuthenticatedUser(apiToken string) (*CliSyncRes
 		Timeout: 10 * time.Second,
 	}
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.userAuthUrl, nil)
+	apiUrl, err := url.JoinPath(c.apiHost.String(), userAuthAPIEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiUrl, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +252,7 @@ func (c *BuchhalterAPIClient) GetAuthenticatedUser(apiToken string) (*CliSyncRes
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http request to %s failed with status code: %d", c.userAuthUrl, resp.StatusCode)
+		return nil, fmt.Errorf("http request to %s failed with status code: %d", apiUrl, resp.StatusCode)
 	}
 
 	var cliSyncResponse CliSyncResponse
