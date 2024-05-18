@@ -42,8 +42,8 @@ type ClientAuthBrowserDriver struct {
 	credentials     *vault.Credentials
 	documentArchive *archive.DocumentArchive
 
-	buchhalterConfigDirectory string
-	buchhalterDirectory       string
+	buchhalterConfigDirectory    string
+	buchhalterDocumentsDirectory string
 
 	ChromeVersion string
 
@@ -64,14 +64,14 @@ type ClientAuthBrowserDriver struct {
 	oauth2PkceVerifierLength int
 }
 
-func NewClientAuthBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterConfigDirectory, buchhalterDirectory string, documentArchive *archive.DocumentArchive) *ClientAuthBrowserDriver {
+func NewClientAuthBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterConfigDirectory, buchhalterDocumentsDirectory string, documentArchive *archive.DocumentArchive) *ClientAuthBrowserDriver {
 	return &ClientAuthBrowserDriver{
 		logger:          logger,
 		credentials:     credentials,
 		documentArchive: documentArchive,
 
-		buchhalterConfigDirectory: buchhalterConfigDirectory,
-		buchhalterDirectory:       buchhalterDirectory,
+		buchhalterConfigDirectory:    buchhalterConfigDirectory,
+		buchhalterDocumentsDirectory: buchhalterDocumentsDirectory,
 
 		recipeTimeout: 120 * time.Second,
 		browserCtx:    context.Background(),
@@ -105,7 +105,7 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 	b.logger.Info("Starting client auth chrome browser driver ... completed ", "recipe", recipe.Provider, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
 
 	// create download directories
-	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDirectory, recipe.Provider)
+	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDocumentsDirectory, recipe.Provider)
 	if err != nil {
 		// TODO Implement error handling
 		fmt.Println(err)

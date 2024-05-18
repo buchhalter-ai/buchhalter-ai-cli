@@ -37,7 +37,7 @@ type BrowserDriver struct {
 	credentials     *vault.Credentials
 	documentArchive *archive.DocumentArchive
 
-	buchhalterDirectory string
+	buchhalterDocumentsDirectory string
 
 	ChromeVersion string
 
@@ -51,13 +51,13 @@ type BrowserDriver struct {
 	newFilesCount      int
 }
 
-func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterDirectory string, documentArchive *archive.DocumentArchive, maxFilesDownloaded int) *BrowserDriver {
+func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterDocumentsDirectory string, documentArchive *archive.DocumentArchive, maxFilesDownloaded int) *BrowserDriver {
 	return &BrowserDriver{
 		logger:          logger,
 		credentials:     credentials,
 		documentArchive: documentArchive,
 
-		buchhalterDirectory: buchhalterDirectory,
+		buchhalterDocumentsDirectory: buchhalterDocumentsDirectory,
 
 		browserCtx:         context.Background(),
 		recipeTimeout:      60 * time.Second,
@@ -97,7 +97,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 	b.logger.Info("Starting chrome browser driver ... completed ", "recipe", recipe.Provider, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
 
 	// create download directories
-	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDirectory, recipe.Provider)
+	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDocumentsDirectory, recipe.Provider)
 	if err != nil {
 		// TODO Implement error handling
 		fmt.Println(err)

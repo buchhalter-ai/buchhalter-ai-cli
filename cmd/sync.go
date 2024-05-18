@@ -67,7 +67,8 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	defer logger.Info("Shutting down")
 
 	// Init document archive
-	documentArchive := archive.NewDocumentArchive(logger, buchhalterDirectory)
+	buchhalterDocumentsDirectory := viper.GetString("buchhalter_documents_directory")
+	documentArchive := archive.NewDocumentArchive(logger, buchhalterDocumentsDirectory)
 
 	// Init vault provider
 	vaultConfigBinary := viper.GetString("credential_provider_cli_command")
@@ -184,7 +185,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	})
 	p.Send(viewMsgProgressUpdate{Percent: 0.001})
 
-	buchhalterDirectory := viper.GetString("buchhalter_directory")
+	buchhalterDocumentsDirectory := viper.GetString("buchhalter_documents_directory")
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 	buchhalterMaxDownloadFilesPerReceipt := viper.GetInt("buchhalter_max_download_files_per_receipt")
 
@@ -216,7 +217,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		logger.Info("Downloading invoices ...", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type)
 		switch recipesToExecute[i].recipe.Type {
 		case "browser":
-			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDirectory, documentArchive, buchhalterMaxDownloadFilesPerReceipt)
+			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDocumentsDirectory, documentArchive, buchhalterMaxDownloadFilesPerReceipt)
 			recipeResult = browserDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = browserDriver.ChromeVersion
@@ -228,7 +229,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 				fmt.Println(err)
 			}
 		case "client":
-			clientDriver := client.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDirectory, documentArchive)
+			clientDriver := client.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDocumentsDirectory, documentArchive)
 			recipeResult = clientDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = clientDriver.ChromeVersion
