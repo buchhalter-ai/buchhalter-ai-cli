@@ -65,6 +65,7 @@ type AuthenticatedUser struct {
 
 type Team struct {
 	ID           string `json:"id"`
+	Slug         string `json:"slug"`
 	Name         string `json:"name"`
 	Subscription string `json:"subscription"`
 	CreatedAt    string `json:"created_at"`

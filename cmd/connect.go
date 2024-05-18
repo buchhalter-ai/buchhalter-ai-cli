@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/viper"
 
 	"buchhalter/lib/repository"
-	"buchhalter/lib/utils"
 )
 
 var connectCmd = &cobra.Command{
@@ -101,9 +100,12 @@ func RunConnectCommand(cmd *cobra.Command, cmdArgs []string) {
 	// Write file
 	homeDir, _ := os.UserHomeDir()
 	buchhalterConfigDir := filepath.Join(homeDir, ".buchhalter")
-	apiTokenFile := filepath.Join(buchhalterConfigDir, ".buchhalter-api-token")
-	logger.Info("Writing API token to file", "file", apiTokenFile)
-	err = utils.WriteStringToFile(apiTokenFile, apiToken)
+
+	// We select the first team for now
+	// TODO Make this selectable
+	teamSlug := cliSyncResponse.User.Teams[0].Slug
+	buchhalterConfig := repository.NewBuchhalterConfig(logger, buchhalterConfigDir)
+	err = buchhalterConfig.WriteLocalAPIConfig(apiToken, teamSlug)
 	if err != nil {
 		logger.Error("API token could not be written to file", "error", err)
 		fmt.Println(textStyle("Connecting to the Buchhalter Platform ... unsuccessful"))

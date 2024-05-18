@@ -7,6 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"buchhalter/lib/repository"
 )
 
 var disconnectCmd = &cobra.Command{
@@ -52,9 +54,8 @@ func RunDisconnectCommand(cmd *cobra.Command, cmdArgs []string) {
 	// Delete file
 	homeDir, _ := os.UserHomeDir()
 	buchhalterConfigDir := filepath.Join(homeDir, ".buchhalter")
-	apiTokenFile := filepath.Join(buchhalterConfigDir, ".buchhalter-api-token")
-	logger.Info("Deleting API token file", "file", apiTokenFile)
-	err = os.Remove(apiTokenFile)
+	buchhalterConfig := repository.NewBuchhalterConfig(logger, buchhalterConfigDir)
+	err = buchhalterConfig.DeleteLocalAPIConfig()
 	if err != nil {
 		logger.Error("Error deleting API token file", "error", err)
 		fmt.Println(textStyle("Disconnecting from the Buchhalter Platform ... unsuccessful. Please try again."))
