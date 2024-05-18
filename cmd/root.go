@@ -145,8 +145,19 @@ func initConfig() {
 	}
 	viper.Set("buchhalter_api_team_slug", teamSlug)
 
+	// Documents directory
+	buchhalterDocumentsDirectory := filepath.Join(buchhalterDir, "documents", teamSlug)
+	viper.Set("buchhalter_documents_directory", buchhalterDocumentsDirectory)
+
 	// Create main directory if not exists
 	err = utils.CreateDirectoryIfNotExists(buchhalterDir)
+	if err != nil {
+		fmt.Println("Error creating main directory:", err)
+		os.Exit(1)
+	}
+
+	// Create documents directory if not exists
+	err = utils.CreateDirectoryIfNotExists(buchhalterDocumentsDirectory)
 	if err != nil {
 		fmt.Println("Error creating main directory:", err)
 		os.Exit(1)
