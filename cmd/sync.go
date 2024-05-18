@@ -153,7 +153,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		})
 		logger.Info("Checking for OICDB repository updates ...", "local_checksum", localOICDBChecksum)
 
-		err := buchhalterAPIClient.UpdateIfAvailable(localOICDBChecksum)
+		err := buchhalterAPIClient.UpdateOpenInvoiceCollectorDBIfAvailable(localOICDBChecksum)
 		if err != nil {
 			logger.Error("Error checking for OICDB repository updates", "error", err)
 			fmt.Println(err)

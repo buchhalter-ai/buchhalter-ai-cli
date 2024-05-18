@@ -105,7 +105,7 @@ func NewBuchhalterAPIClient(logger *slog.Logger, apiHost, configDirectory, apiTo
 	return c, nil
 }
 
-func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
+func (c *BuchhalterAPIClient) UpdateOpenInvoiceCollectorDBIfAvailable(currentChecksum string) error {
 	updateExists, err := c.updateExists(currentChecksum)
 	if err != nil {
 		return fmt.Errorf("you're offline - please connect to the internet for using buchhalter-cli: %w", err)
