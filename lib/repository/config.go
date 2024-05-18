@@ -2,6 +2,7 @@ package repository
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -45,7 +46,31 @@ func (b *BuchhalterConfig) WriteLocalAPIConfig(apiToken, teamSlug string) error 
 
 func (b *BuchhalterConfig) DeleteLocalAPIConfig() error {
 	apiTokenFile := filepath.Join(b.configDirectory, apiTokenFileName)
+	if _, err := os.Stat(apiTokenFile); errors.Is(err, os.ErrNotExist) {
+		b.logger.Info("API token file does not exist", "file", apiTokenFile)
+		return nil
+	}
+
 	b.logger.Info("Deleting API token file", "file", apiTokenFile)
 	err := os.Remove(apiTokenFile)
 	return err
+}
+
+func (b *BuchhalterConfig) GetLocalAPIConfig() (*APIConfig, error) {
+	c := &APIConfig{}
+
+	apiTokenFile := filepath.Join(b.configDirectory, apiTokenFileName)
+	if _, err := os.Stat(apiTokenFile); err == nil {
+		fileContent, err := os.ReadFile(apiTokenFile)
+		if err != nil {
+			return c, err
+		}
+
+		err = json.Unmarshal(fileContent, c)
+		if err != nil {
+			return c, err
+		}
+	}
+
+	return c, nil
 }

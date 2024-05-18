@@ -10,12 +10,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"buchhalter/lib/utils"
-
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"buchhalter/lib/repository"
+	"buchhalter/lib/utils"
 )
 
 const (
@@ -90,7 +91,6 @@ func initConfig() {
 	buchhalterConfigDir := filepath.Join(homeDir, ".buchhalter")
 	configFile := filepath.Join(buchhalterConfigDir, ".buchhalter.yaml")
 	buchhalterDir := filepath.Join(homeDir, "buchhalter")
-	apiTokenFile := filepath.Join(buchhalterConfigDir, ".buchhalter-api-token")
 
 	// Set default values for viper config
 	// TODO Verify if all of these settings are documented
@@ -130,15 +130,20 @@ func initConfig() {
 		os.Exit(1)
 	}
 
-	// Read API Token
-	if _, err := os.Stat(apiTokenFile); err == nil {
-		apiToken, err := os.ReadFile(apiTokenFile)
-		if err != nil {
-			fmt.Println("Error reading api token file:", err)
-			os.Exit(1)
-		}
-		viper.Set("buchhalter_api_token", string(apiToken))
+	// Read local API settings
+	dummyLogger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	buchhalterConfig := repository.NewBuchhalterConfig(dummyLogger, buchhalterConfigDir)
+	apiConfig, err := buchhalterConfig.GetLocalAPIConfig()
+	if err != nil {
+		fmt.Println("Error reading api token file:", err)
+		os.Exit(1)
 	}
+	viper.Set("buchhalter_api_token", apiConfig.APIKey)
+	teamSlug := "default"
+	if len(apiConfig.TeamSlug) > 0 {
+		teamSlug = apiConfig.TeamSlug
+	}
+	viper.Set("buchhalter_api_team_slug", teamSlug)
 
 	// Create main directory if not exists
 	err = utils.CreateDirectoryIfNotExists(buchhalterDir)
