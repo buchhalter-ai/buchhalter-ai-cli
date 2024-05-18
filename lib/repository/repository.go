@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	schemaAPIEndpoint     = "/api/cli/schema"
 	repositoryAPIEndpoint = "/api/cli/repository"
 	metricsAPIEndpoint    = "/api/cli/metrics"
 	userAuthAPIEndpoint   = "/api/cli/sync"
@@ -106,7 +107,7 @@ func NewBuchhalterAPIClient(logger *slog.Logger, apiHost, configDirectory, apiTo
 }
 
 func (c *BuchhalterAPIClient) UpdateOpenInvoiceCollectorDBIfAvailable(currentChecksum string) error {
-	updateExists, err := c.updateExists(currentChecksum)
+	updateExists, err := c.updateExists(currentChecksum, repositoryAPIEndpoint)
 	if err != nil {
 		return fmt.Errorf("you're offline - please connect to the internet for using buchhalter-cli: %w", err)
 	}
@@ -157,12 +158,69 @@ func (c *BuchhalterAPIClient) UpdateOpenInvoiceCollectorDBIfAvailable(currentChe
 	return nil
 }
 
-func (c *BuchhalterAPIClient) updateExists(currentChecksum string) (bool, error) {
+func (c *BuchhalterAPIClient) UpdateOpenInvoiceCollectorDBSchemaIfAvailable(currentChecksum string) error {
+	err := c.downloadFileFromAPIEndpoint(currentChecksum, schemaAPIEndpoint, "oicdb.schema.json")
+	return err
+}
+
+func (c *BuchhalterAPIClient) downloadFileFromAPIEndpoint(currentChecksum, apiEndpoint, localFileName string) error {
+	updateExists, err := c.updateExists(currentChecksum, apiEndpoint)
+	if err != nil {
+		return fmt.Errorf("you're offline - please connect to the internet for using buchhalter-cli: %w", err)
+	}
+
+	if updateExists {
+		c.logger.Info("Starting to update the local file ...", "file", localFileName, "api_endpoint", apiEndpoint)
+		client := &http.Client{
+			Timeout: 10 * time.Second,
+		}
+		ctx := context.Background()
+		apiUrl, err := url.JoinPath(c.apiHost.String(), apiEndpoint)
+		if err != nil {
+			return err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiUrl, nil)
+		if err != nil {
+			return err
+		}
+
+		req.Header.Set("User-Agent", c.userAgent)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			fileToUpdate := filepath.Join(c.configDirectory, localFileName)
+			out, err := os.Create(fileToUpdate)
+			if err != nil {
+				return fmt.Errorf("couldn't create "+localFileName+" file: %w", err)
+			}
+			defer out.Close()
+
+			bytesCopied, err := io.Copy(out, resp.Body)
+			if err != nil {
+				return fmt.Errorf("error copying response body to file: %w", err)
+			}
+
+			c.logger.Info("Starting to update the local file ... completed", "file", fileToUpdate, "bytes_written", bytesCopied, "api_endpoint", apiEndpoint)
+			return nil
+		}
+		return fmt.Errorf("http request to %s failed with status code: %d", apiUrl, resp.StatusCode)
+	}
+
+	return nil
+}
+
+func (c *BuchhalterAPIClient) updateExists(currentChecksum, apiEndpoint string) (bool, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 	ctx := context.Background()
-	apiUrl, err := url.JoinPath(c.apiHost.String(), repositoryAPIEndpoint)
+	apiUrl, err := url.JoinPath(c.apiHost.String(), apiEndpoint)
 	if err != nil {
 		return false, err
 	}
@@ -184,11 +242,11 @@ func (c *BuchhalterAPIClient) updateExists(currentChecksum string) (bool, error)
 		checksum := resp.Header.Get("x-checksum")
 		if checksum != "" {
 			if checksum == currentChecksum {
-				c.logger.Info("No new updates for OICDB repository available", "local_checksum", currentChecksum, "remote_checksum", checksum)
+				c.logger.Info("No new updates available", "local_checksum", currentChecksum, "remote_checksum", checksum, "api_endpoint", apiEndpoint)
 				return false, nil
 			}
 
-			c.logger.Info("New updates for OICDB repository available", "local_checksum", currentChecksum, "remote_checksum", checksum)
+			c.logger.Info("New updates for available", "local_checksum", currentChecksum, "remote_checksum", checksum, "api_endpoint", apiEndpoint)
 			return true, nil
 		}
 

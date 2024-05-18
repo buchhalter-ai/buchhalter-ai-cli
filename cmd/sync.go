@@ -92,6 +92,13 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		os.Exit(1)
 	}
 
+	localOICDBSchemaChecksum, err := recipeParser.GetChecksumOfLocalOICDBSchema()
+	if err != nil {
+		logger.Error("Error calculating checksum of local Open Invoice Collector Database Schema", "error", err)
+		fmt.Printf("Error calculating checksum of local Open Invoice Collector Database Schema: %s\n", err)
+		os.Exit(1)
+	}
+
 	apiHost := viper.GetString("buchhalter_api_host")
 	apiToken := viper.GetString("buchhalter_api_token")
 	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiToken, CliVersion)
@@ -122,7 +129,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
 
 	// Run recipes
-	go runRecipes(p, logger, provider, localOICDBChecksum, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
+	go runRecipes(p, logger, provider, localOICDBChecksum, localOICDBSchemaChecksum, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
 
 	if _, err := p.Run(); err != nil {
 		logger.Error("Error running program", "error", err)
@@ -131,7 +138,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 }
 
-func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksum string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
+func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksum, localOICDBSchemaChecksum string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
 	p.Send(viewMsgStatusUpdate{
 		title:    "Build archive index",
 		hasError: false,
@@ -148,12 +155,25 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	developmentMode := viper.GetBool("dev")
 	if !developmentMode {
 		p.Send(viewMsgStatusUpdate{
+			title:    "Checking for OICDB schema updates ...",
+			hasError: false,
+		})
+		logger.Info("Checking for OICDB schema updates ...", "local_checksum", localOICDBSchemaChecksum)
+
+		err := buchhalterAPIClient.UpdateOpenInvoiceCollectorDBSchemaIfAvailable(localOICDBSchemaChecksum)
+		if err != nil {
+			logger.Error("Error checking for OICDB schema updates", "error", err)
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		p.Send(viewMsgStatusUpdate{
 			title:    "Checking for OICDB repository updates ...",
 			hasError: false,
 		})
 		logger.Info("Checking for OICDB repository updates ...", "local_checksum", localOICDBChecksum)
 
-		err := buchhalterAPIClient.UpdateOpenInvoiceCollectorDBIfAvailable(localOICDBChecksum)
+		err = buchhalterAPIClient.UpdateOpenInvoiceCollectorDBIfAvailable(localOICDBChecksum)
 		if err != nil {
 			logger.Error("Error checking for OICDB repository updates", "error", err)
 			fmt.Println(err)
