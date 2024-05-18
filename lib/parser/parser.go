@@ -148,7 +148,7 @@ func (p *RecipeParser) GetRecipeForItem(item vault.Item, urlsByItemId map[string
 }
 
 func validateRecipes(buchhalterConfigDirectory string) (bool, error) {
-	schemaLoader := gojsonschema.NewReferenceLoader("file://schema/oicdb.schema.json")
+	schemaLoader := gojsonschema.NewReferenceLoader("file://" + filepath.Join(buchhalterConfigDirectory, "oicdb.schema.json"))
 	documentLoader := gojsonschema.NewReferenceLoader("file://" + filepath.Join(buchhalterConfigDirectory, "oicdb.json"))
 
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
