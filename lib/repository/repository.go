@@ -107,55 +107,8 @@ func NewBuchhalterAPIClient(logger *slog.Logger, apiHost, configDirectory, apiTo
 }
 
 func (c *BuchhalterAPIClient) UpdateOpenInvoiceCollectorDBIfAvailable(currentChecksum string) error {
-	updateExists, err := c.updateExists(currentChecksum, repositoryAPIEndpoint)
-	if err != nil {
-		return fmt.Errorf("you're offline - please connect to the internet for using buchhalter-cli: %w", err)
-	}
-
-	if updateExists {
-		c.logger.Info("Starting to update the local OICDB repository ...")
-		client := &http.Client{
-			Timeout: 10 * time.Second,
-		}
-		ctx := context.Background()
-		apiUrl, err := url.JoinPath(c.apiHost.String(), repositoryAPIEndpoint)
-		if err != nil {
-			return err
-		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiUrl, nil)
-		if err != nil {
-			return err
-		}
-
-		req.Header.Set("User-Agent", c.userAgent)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusOK {
-			fileToUpdate := filepath.Join(c.configDirectory, "oicdb.json")
-			out, err := os.Create(fileToUpdate)
-			if err != nil {
-				return fmt.Errorf("couldn't create oicdb.json file: %w", err)
-			}
-			defer out.Close()
-
-			bytesCopied, err := io.Copy(out, resp.Body)
-			if err != nil {
-				return fmt.Errorf("error copying response body to file: %w", err)
-			}
-
-			c.logger.Info("Starting to update the local OICDB repository ... completed", "database", fileToUpdate, "bytes_written", bytesCopied)
-			return nil
-		}
-		return fmt.Errorf("http request to %s failed with status code: %d", apiUrl, resp.StatusCode)
-	}
-
-	return nil
+	err := c.downloadFileFromAPIEndpoint(currentChecksum, repositoryAPIEndpoint, "oicdb.json")
+	return err
 }
 
 func (c *BuchhalterAPIClient) UpdateOpenInvoiceCollectorDBSchemaIfAvailable(currentChecksum string) error {
