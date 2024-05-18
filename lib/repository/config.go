@@ -18,6 +18,8 @@ type APIConfig struct {
 	TeamSlug string `json:"team_slug"`
 }
 
+const apiTokenFileName = ".buchhalter-api-token"
+
 func NewBuchhalterConfig(logger *slog.Logger, configDirectory string) *BuchhalterConfig {
 	return &BuchhalterConfig{
 		logger:          logger,
@@ -35,8 +37,15 @@ func (b *BuchhalterConfig) WriteLocalAPIConfig(apiToken, teamSlug string) error 
 		return err
 	}
 
-	apiTokenFile := filepath.Join(b.configDirectory, ".buchhalter-api-token")
+	apiTokenFile := filepath.Join(b.configDirectory, apiTokenFileName)
 	b.logger.Info("Writing API token to file", "file", apiTokenFile)
 	err = os.WriteFile(apiTokenFile, fileContent, 0644)
+	return err
+}
+
+func (b *BuchhalterConfig) DeleteLocalAPIConfig() error {
+	apiTokenFile := filepath.Join(b.configDirectory, apiTokenFileName)
+	b.logger.Info("Deleting API token file", "file", apiTokenFile)
+	err := os.Remove(apiTokenFile)
 	return err
 }
