@@ -1,4 +1,3 @@
-api_token: "sd8f8s7dfh87sdhf87hsdf87hsdf"
 credential_provider_cli_command: "/usr/local/bin/op"
 credential_provider_vault: "Base"
 credential_provider_item_tag: "buchhalter-ai"
