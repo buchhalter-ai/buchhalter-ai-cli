@@ -393,6 +393,13 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 		if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
 			chromedp.MouseClickNode(n),
 		}); err != nil {
+			// If we get an "Node does not have a layout object (-32000)" error here,
+			// this could mean that the node selector is not good enough.
+			// Standard selectors do a text search, which might hit more nodes than we need (or elements that are not a node at all)
+			// Possible solutions:
+			// - Use a more specific selector
+			// - Use a different selector type
+			// See https://pkg.go.dev/github.com/chromedp/chromedp#hdr-Query_Options for more information
 			return utils.StepResult{Status: "error", Message: err.Error()}
 		}
 
