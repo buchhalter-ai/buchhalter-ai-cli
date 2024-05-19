@@ -330,6 +330,8 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 				continue
 			}
 		}
+	} else {
+		logger.Info("Skipping document upload to Buchhalter API due to missing premium subscription")
 	}
 
 	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")

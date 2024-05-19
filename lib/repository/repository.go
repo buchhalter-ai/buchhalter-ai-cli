@@ -258,6 +258,11 @@ func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVer
 }
 
 func (c *BuchhalterAPIClient) GetAuthenticatedUser() (*CliSyncResponse, error) {
+	// If we don't have an API token, we can't authenticate
+	if len(c.apiToken) == 0 {
+		return nil, nil
+	}
+
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -280,6 +285,11 @@ func (c *BuchhalterAPIClient) GetAuthenticatedUser() (*CliSyncResponse, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	// No auth possible
+	if resp.StatusCode == http.StatusForbidden {
+		return nil, nil
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("http request to %s failed with status code: %d", apiUrl, resp.StatusCode)
