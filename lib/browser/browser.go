@@ -383,10 +383,11 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 	for _, n := range nodes {
 		// Only download maxFilesDownloaded files
 		if b.maxFilesDownloaded > 0 && x >= b.maxFilesDownloaded {
+			b.logger.Debug("Breaking download loop, because max_files_downloaded is reached", "action", step.Action, "max_files_downloaded", b.maxFilesDownloaded, "loop", x)
 			break
 		}
 
-		b.logger.Debug("Executing recipe step ... trigger download click", "action", step.Action, "selector", n.FullXPath()+step.Value)
+		b.logger.Debug("Executing recipe step ... trigger download click", "action", step.Action, "selector", n.FullXPath()+step.Value, "loop", x, "max_files_downloaded", b.maxFilesDownloaded, "len(nodes)", len(nodes))
 		wg.Add(1)
 		concurrentDownloadsPool <- struct{}{}
 		if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
@@ -405,9 +406,11 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 		}
 
 		// Delay clicks to prevent too many downloads at once/rate limiting
+		b.logger.Debug("Executing recipe step ... sleeping a bit before we trigger the next download", "action", step.Action, "loop", x)
 		time.Sleep(1500 * time.Millisecond)
 		x++
 	}
+	b.logger.Debug("Executing recipe step ... waiting for downloads to complete", "action", step.Action)
 	wg.Wait()
 	close(concurrentDownloadsPool)
 
