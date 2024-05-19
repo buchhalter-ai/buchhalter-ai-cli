@@ -29,7 +29,7 @@ jobs:
         run: make test
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v5.1.0
+        uses: golangci/golangci-lint-action@v6.0.1
         with:
           version: v1.56.2
           args: --disable staticcheck --enable errcheck,gosimple,govet,ineffassign,typecheck,unused,misspell
