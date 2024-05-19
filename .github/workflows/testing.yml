@@ -31,7 +31,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6.0.1
         with:
-          version: v1.56.2
+          version: v1.58.1
           args: --disable staticcheck --enable errcheck,gosimple,govet,ineffassign,typecheck,unused,misspell
 
       # golangci-lint contains only a set of rules from staticcheck.
