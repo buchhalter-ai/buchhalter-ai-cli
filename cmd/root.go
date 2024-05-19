@@ -92,7 +92,7 @@ func initConfig() {
 	buchhalterDir := filepath.Join(homeDir, "buchhalter")
 
 	// Set default values for viper config
-	// TODO Verify if all of these settings are documented
+	// Documented settings
 	viper.SetDefault("credential_provider_cli_command", "")
 	viper.SetDefault("credential_provider_vault", "Base")
 	viper.SetDefault("credential_provider_item_tag", "buchhalter-ai")
@@ -102,7 +102,14 @@ func initConfig() {
 	viper.SetDefault("buchhalter_api_host", "https://app.buchhalter.ai/")
 	viper.SetDefault("buchhalter_always_send_metrics", false)
 	viper.SetDefault("dev", false)
-	viper.Set("buchhalter_api_token", "")
+
+	// Non documented settings (on purpose)
+	// Those settings are either part of a different configuration file or are not meant to be changed by the user
+	// E.g. when they are calculated based on other settings
+	viper.SetDefault("buchhalter_api_token", "")
+	// See below
+	// - buchhalter_api_team_slug
+	// - buchhalter_documents_directory
 
 	// Check if config file exists or create it
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
