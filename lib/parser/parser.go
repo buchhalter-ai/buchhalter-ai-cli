@@ -148,7 +148,7 @@ func (p *RecipeParser) GetRecipeForItem(item vault.Item, urlsByItemId map[string
 }
 
 func validateRecipes(buchhalterConfigDirectory string) (bool, error) {
-	schemaLoader := gojsonschema.NewReferenceLoader("file://schema/oicdb.schema.json")
+	schemaLoader := gojsonschema.NewReferenceLoader("file://" + filepath.Join(buchhalterConfigDirectory, "oicdb.schema.json"))
 	documentLoader := gojsonschema.NewReferenceLoader("file://" + filepath.Join(buchhalterConfigDirectory, "oicdb.json"))
 
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
@@ -253,6 +253,31 @@ func (p *RecipeParser) GetChecksumOfLocalOICDB() (string, error) {
 	}
 	checksum := fmt.Sprintf("%x", h.Sum(nil))
 	p.logger.Info("Checksum of local Open Invoice Collector Database calculated", "database", oicdbFile, "checksum", checksum)
+
+	return checksum, nil
+}
+
+func (p *RecipeParser) GetChecksumOfLocalOICDBSchema() (string, error) {
+	oicdbFile := filepath.Join(p.configDirectory, "oicdb.schema.json")
+	p.logger.Info("Calculate checksum of local Open Invoice Collector Database Schema ...", "schema", oicdbFile)
+
+	if _, err := os.Stat(oicdbFile); errors.Is(err, os.ErrNotExist) {
+		p.logger.Info("Local Open Invoice Collector Database Schema does not exist yet", "schema", oicdbFile)
+		return "", nil
+	}
+
+	f, err := os.Open(oicdbFile)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha1.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	checksum := fmt.Sprintf("%x", h.Sum(nil))
+	p.logger.Info("Checksum of local Open Invoice Collector Database Schema calculated", "schema", oicdbFile, "checksum", checksum)
 
 	return checksum, nil
 }

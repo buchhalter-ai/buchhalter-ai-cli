@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	schemaAPIEndpoint     = "/api/cli/schema"
 	repositoryAPIEndpoint = "/api/cli/repository"
 	metricsAPIEndpoint    = "/api/cli/metrics"
 	userAuthAPIEndpoint   = "/api/cli/sync"
@@ -105,19 +106,29 @@ func NewBuchhalterAPIClient(logger *slog.Logger, apiHost, configDirectory, apiTo
 	return c, nil
 }
 
-func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
-	updateExists, err := c.updateExists(currentChecksum)
+func (c *BuchhalterAPIClient) UpdateOpenInvoiceCollectorDBIfAvailable(currentChecksum string) error {
+	err := c.downloadFileFromAPIEndpoint(currentChecksum, repositoryAPIEndpoint, "oicdb.json")
+	return err
+}
+
+func (c *BuchhalterAPIClient) UpdateOpenInvoiceCollectorDBSchemaIfAvailable(currentChecksum string) error {
+	err := c.downloadFileFromAPIEndpoint(currentChecksum, schemaAPIEndpoint, "oicdb.schema.json")
+	return err
+}
+
+func (c *BuchhalterAPIClient) downloadFileFromAPIEndpoint(currentChecksum, apiEndpoint, localFileName string) error {
+	updateExists, err := c.updateExists(currentChecksum, apiEndpoint)
 	if err != nil {
 		return fmt.Errorf("you're offline - please connect to the internet for using buchhalter-cli: %w", err)
 	}
 
 	if updateExists {
-		c.logger.Info("Starting to update the local OICDB repository ...")
+		c.logger.Info("Starting to update the local file ...", "file", localFileName, "api_endpoint", apiEndpoint)
 		client := &http.Client{
 			Timeout: 10 * time.Second,
 		}
 		ctx := context.Background()
-		apiUrl, err := url.JoinPath(c.apiHost.String(), repositoryAPIEndpoint)
+		apiUrl, err := url.JoinPath(c.apiHost.String(), apiEndpoint)
 		if err != nil {
 			return err
 		}
@@ -136,10 +147,10 @@ func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
-			fileToUpdate := filepath.Join(c.configDirectory, "oicdb.json")
+			fileToUpdate := filepath.Join(c.configDirectory, localFileName)
 			out, err := os.Create(fileToUpdate)
 			if err != nil {
-				return fmt.Errorf("couldn't create oicdb.json file: %w", err)
+				return fmt.Errorf("couldn't create "+localFileName+" file: %w", err)
 			}
 			defer out.Close()
 
@@ -148,7 +159,7 @@ func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
 				return fmt.Errorf("error copying response body to file: %w", err)
 			}
 
-			c.logger.Info("Starting to update the local OICDB repository ... completed", "database", fileToUpdate, "bytes_written", bytesCopied)
+			c.logger.Info("Starting to update the local file ... completed", "file", fileToUpdate, "bytes_written", bytesCopied, "api_endpoint", apiEndpoint)
 			return nil
 		}
 		return fmt.Errorf("http request to %s failed with status code: %d", apiUrl, resp.StatusCode)
@@ -157,12 +168,12 @@ func (c *BuchhalterAPIClient) UpdateIfAvailable(currentChecksum string) error {
 	return nil
 }
 
-func (c *BuchhalterAPIClient) updateExists(currentChecksum string) (bool, error) {
+func (c *BuchhalterAPIClient) updateExists(currentChecksum, apiEndpoint string) (bool, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 	ctx := context.Background()
-	apiUrl, err := url.JoinPath(c.apiHost.String(), repositoryAPIEndpoint)
+	apiUrl, err := url.JoinPath(c.apiHost.String(), apiEndpoint)
 	if err != nil {
 		return false, err
 	}
@@ -184,11 +195,11 @@ func (c *BuchhalterAPIClient) updateExists(currentChecksum string) (bool, error)
 		checksum := resp.Header.Get("x-checksum")
 		if checksum != "" {
 			if checksum == currentChecksum {
-				c.logger.Info("No new updates for OICDB repository available", "local_checksum", currentChecksum, "remote_checksum", checksum)
+				c.logger.Info("No new updates available", "local_checksum", currentChecksum, "remote_checksum", checksum, "api_endpoint", apiEndpoint)
 				return false, nil
 			}
 
-			c.logger.Info("New updates for OICDB repository available", "local_checksum", currentChecksum, "remote_checksum", checksum)
+			c.logger.Info("New updates for available", "local_checksum", currentChecksum, "remote_checksum", checksum, "api_endpoint", apiEndpoint)
 			return true, nil
 		}
 
