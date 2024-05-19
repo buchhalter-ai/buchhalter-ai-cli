@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -101,9 +100,9 @@ func initConfig() {
 	viper.SetDefault("buchhalter_config_directory", buchhalterConfigDir)
 	viper.SetDefault("buchhalter_max_download_files_per_receipt", 2)
 	viper.SetDefault("buchhalter_api_host", "https://app.buchhalter.ai/")
-	viper.SetDefault("buchhalter_api_token", "")
 	viper.SetDefault("buchhalter_always_send_metrics", false)
 	viper.SetDefault("dev", false)
+	viper.Set("buchhalter_api_token", "")
 
 	// Check if config file exists or create it
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
@@ -113,8 +112,6 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		secret := uuid.New().String()
-		viper.Set("buchhalter_secret", secret)
 		err = viper.WriteConfigAs(configFile)
 		if err != nil {
 			fmt.Println("Error creating config file:", err)
