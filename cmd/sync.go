@@ -152,21 +152,23 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		fmt.Println(err)
 	}
 
+	// Check for OICDB schema updates
+	p.Send(viewMsgStatusUpdate{
+		title:    "Checking for OICDB schema updates ...",
+		hasError: false,
+	})
+	logger.Info("Checking for OICDB schema updates ...", "local_checksum", localOICDBSchemaChecksum)
+
+	err = buchhalterAPIClient.UpdateOpenInvoiceCollectorDBSchemaIfAvailable(localOICDBSchemaChecksum)
+	if err != nil {
+		logger.Error("Error checking for OICDB schema updates", "error", err)
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	developmentMode := viper.GetBool("dev")
 	if !developmentMode {
-		p.Send(viewMsgStatusUpdate{
-			title:    "Checking for OICDB schema updates ...",
-			hasError: false,
-		})
-		logger.Info("Checking for OICDB schema updates ...", "local_checksum", localOICDBSchemaChecksum)
-
-		err := buchhalterAPIClient.UpdateOpenInvoiceCollectorDBSchemaIfAvailable(localOICDBSchemaChecksum)
-		if err != nil {
-			logger.Error("Error checking for OICDB schema updates", "error", err)
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
+		// Check for OICDB repository updates
 		p.Send(viewMsgStatusUpdate{
 			title:    "Checking for OICDB repository updates ...",
 			hasError: false,
