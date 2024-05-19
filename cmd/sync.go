@@ -360,8 +360,7 @@ func prepareRecipes(logger *slog.Logger, provider string, vaultProvider *vault.P
 	loadRecipeResult, err := recipeParser.LoadRecipes(developmentMode)
 	if err != nil {
 		// TODO Implement better error handling
-		logger.Error("Error loading recipes for suppliers", "error", err)
-		fmt.Println(loadRecipeResult)
+		logger.Error("Error loading recipes for suppliers", "error", err, "load_recipe_result", loadRecipeResult)
 		fmt.Println(err)
 	}
 
