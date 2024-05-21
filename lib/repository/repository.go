@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/spf13/viper"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -327,8 +328,8 @@ func (c *BuchhalterAPIClient) DoesDocumentExist(documentHash string) (bool, erro
 		return false, err
 	}
 
-	// TODO Make url configurable
-	u := fmt.Sprintf("https://app.buchhalter.ai/api/cli/%s/check", teamId)
+	apiHost := viper.GetString("buchhalter_api_host")
+	u := fmt.Sprintf(apiHost+"api/cli/%s/check", teamId)
 	c.logger.Info("Checking document existence", "url", u)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(jsonRequestPayload))
 	if err != nil {
@@ -414,8 +415,8 @@ func (c *BuchhalterAPIClient) UploadDocument(filePath, provider string) error {
 	// For now we just get the first one
 	teamId := c.authenticatedUser.Teams[0].ID
 
-	// TODO Make url configurable
-	u := fmt.Sprintf("https://app.buchhalter.ai/api/cli/%s/upload", teamId)
+	apiHost := viper.GetString("buchhalter_api_host")
+	u := fmt.Sprintf(apiHost+"api/cli/%s/upload", teamId)
 	c.logger.Info("Upload document to API", "url", u, "file", filePath, "provider", provider)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, body)
 	if err != nil {
