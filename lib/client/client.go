@@ -80,7 +80,7 @@ func NewClientAuthBrowserDriver(logger *slog.Logger, credentials *vault.Credenti
 }
 
 func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) utils.RecipeResult {
-	b.logger.Info("Starting client auth chrome browser driver ...", "recipe", recipe.Provider, "recipe_version", recipe.Version)
+	b.logger.Info("Starting client auth chrome browser driver ...", "recipe", recipe.Supplier, "recipe_version", recipe.Version)
 	ctx, cancel, err := cu.New(cu.NewConfig(
 		cu.WithContext(b.browserCtx),
 	))
@@ -102,10 +102,10 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 		}
 		b.ChromeVersion = strings.TrimSpace(b.ChromeVersion)
 	}
-	b.logger.Info("Starting client auth chrome browser driver ... completed ", "recipe", recipe.Provider, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
+	b.logger.Info("Starting client auth chrome browser driver ... completed ", "recipe", recipe.Supplier, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
 
 	// create download directories
-	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDocumentsDirectory, recipe.Provider)
+	b.downloadsDirectory, b.documentsDirectory, err = utils.InitSupplierDirectories(b.buchhalterDocumentsDirectory, recipe.Supplier)
 	if err != nil {
 		// TODO Implement error handling
 		fmt.Println(err)
@@ -117,7 +117,7 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 	var result utils.RecipeResult
 	for _, step := range recipe.Steps {
 		p.Send(utils.ViewMsgStatusAndDescriptionUpdate{
-			Title:       fmt.Sprintf("Downloading invoices from %s (%d/%d):", recipe.Provider, n, stepCountInCurrentRecipe),
+			Title:       fmt.Sprintf("Downloading invoices from %s (%d/%d):", recipe.Supplier, n, stepCountInCurrentRecipe),
 			Description: step.Description,
 		})
 
@@ -148,18 +148,18 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 			if lastStepResult.Status == "success" {
 				result = utils.RecipeResult{
 					Status:              "success",
-					StatusText:          recipe.Provider + ": " + newDocumentsText,
-					StatusTextFormatted: "- " + textStyleBold(recipe.Provider) + ": " + newDocumentsText,
-					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Provider, recipe.Version, n, step.Action),
+					StatusText:          recipe.Supplier + ": " + newDocumentsText,
+					StatusTextFormatted: "- " + textStyleBold(recipe.Supplier) + ": " + newDocumentsText,
+					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Supplier, recipe.Version, n, step.Action),
 					LastStepDescription: step.Description,
 					NewFilesCount:       b.newFilesCount,
 				}
 			} else {
 				result = utils.RecipeResult{
 					Status:              "error",
-					StatusText:          recipe.Provider + " aborted with error.",
-					StatusTextFormatted: "x " + textStyleBold(recipe.Provider) + " aborted with error.",
-					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Provider, recipe.Version, n, step.Action),
+					StatusText:          recipe.Supplier + " aborted with error.",
+					StatusTextFormatted: "x " + textStyleBold(recipe.Supplier) + " aborted with error.",
+					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Supplier, recipe.Version, n, step.Action),
 					LastStepDescription: step.Description,
 					LastErrorMessage:    lastStepResult.Message,
 					NewFilesCount:       b.newFilesCount,
@@ -172,9 +172,9 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 		case <-time.After(b.recipeTimeout):
 			result = utils.RecipeResult{
 				Status:              "error",
-				StatusText:          recipe.Provider + " aborted with timeout.",
-				StatusTextFormatted: "x " + textStyleBold(recipe.Provider) + " aborted with timeout.",
-				LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Provider, recipe.Version, n, step.Action),
+				StatusText:          recipe.Supplier + " aborted with timeout.",
+				StatusTextFormatted: "x " + textStyleBold(recipe.Supplier) + " aborted with timeout.",
+				LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Supplier, recipe.Version, n, step.Action),
 				LastStepDescription: step.Description,
 				NewFilesCount:       b.newFilesCount,
 			}
@@ -208,7 +208,7 @@ func (b *ClientAuthBrowserDriver) stepOauth2CheckTokens(ctx context.Context, rec
 	b.logger.Info("Checking OAuth2 tokens ...")
 
 	// Try to get secrets from cache
-	pii := recipe.Provider + "|" + credentials.Id
+	pii := recipe.Supplier + "|" + credentials.Id
 	tokens, err := secrets.GetOauthAccessTokenFromCache(pii, buchhalterConfigDirectory)
 	if err == nil {
 		if b.validOauth2AuthToken(tokens) {
@@ -332,7 +332,7 @@ func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, re
 "redirect_uri": "` + b.oauth2RedirectUrl + `"
 }`)
 
-	pii := recipe.Provider + "|" + credentials.Id
+	pii := recipe.Supplier + "|" + credentials.Id
 	tokens, err := b.getOauth2Tokens(ctx, payload, pii, buchhalterConfigDirectory)
 	if err != nil {
 		b.logger.Error("Error while getting fresh OAuth2 access token", "error", err.Error())

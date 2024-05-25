@@ -45,9 +45,9 @@ func init() {
 }
 
 func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
-	provider := ""
+	supplier := ""
 	if len(cmdArgs) > 0 {
-		provider = cmdArgs[0]
+		supplier = cmdArgs[0]
 	}
 
 	// Init logging
@@ -129,7 +129,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
 
 	// Run recipes
-	go runRecipes(p, logger, provider, localOICDBChecksum, localOICDBSchemaChecksum, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
+	go runRecipes(p, logger, supplier, localOICDBChecksum, localOICDBSchemaChecksum, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
 
 	if _, err := p.Run(); err != nil {
 		logger.Error("Error running program", "error", err)
@@ -138,7 +138,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 }
 
-func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksum, localOICDBSchemaChecksum string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
+func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksum, localOICDBSchemaChecksum string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
 	p.Send(viewMsgStatusUpdate{
 		title:    "Build archive index",
 		hasError: false,
@@ -183,11 +183,11 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		}
 	}
 
-	recipesToExecute := prepareRecipes(logger, provider, vaultProvider, recipeParser)
-	// No credentials found for provider/recipes
+	recipesToExecute := prepareRecipes(logger, supplier, vaultProvider, recipeParser)
+	// No credentials found for supplier/recipes
 	if len(recipesToExecute) == 0 {
 		// TODO Implement better error handling
-		logger.Error("No recipes found for suppliers", "provider", provider)
+		logger.Error("No recipes found for suppliers", "supplier", supplier)
 		fmt.Println("No recipes found for suppliers")
 		os.Exit(1)
 	}
@@ -195,8 +195,8 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	var t string
 	recipeCount := len(recipesToExecute)
 	if recipeCount == 1 {
-		t = fmt.Sprintf("Running one recipe for supplier %s ...", recipesToExecute[0].recipe.Provider)
-		logger.Info("Running one recipe ...", "supplier", recipesToExecute[0].recipe.Provider)
+		t = fmt.Sprintf("Running one recipe for supplier %s ...", recipesToExecute[0].recipe.Supplier)
+		logger.Info("Running one recipe ...", "supplier", recipesToExecute[0].recipe.Supplier)
 	} else {
 		t = fmt.Sprintf("Running recipes for %d suppliers ...", recipeCount)
 		logger.Info("Running recipes for multiple suppliers ...", "num_suppliers", recipeCount)
@@ -222,12 +222,12 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		startTime := time.Now()
 		stepCountInCurrentRecipe = len(recipesToExecute[i].recipe.Steps)
 		p.Send(viewMsgStatusUpdate{
-			title:    "Downloading invoices from " + recipesToExecute[i].recipe.Provider + ":",
+			title:    "Downloading invoices from " + recipesToExecute[i].recipe.Supplier + ":",
 			hasError: false,
 		})
 
 		// Load username, password, totp from vault
-		logger.Info("Requesting credentials from vault", "supplier", recipesToExecute[i].recipe.Provider)
+		logger.Info("Requesting credentials from vault", "supplier", recipesToExecute[i].recipe.Supplier)
 		recipeCredentials, err := vaultProvider.GetCredentialsByItemId(recipesToExecute[i].vaultItemId)
 		if err != nil {
 			// TODO Implement better error handling
@@ -236,7 +236,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			continue
 		}
 
-		logger.Info("Downloading invoices ...", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type)
+		logger.Info("Downloading invoices ...", "supplier", recipesToExecute[i].recipe.Supplier, "supplier_type", recipesToExecute[i].recipe.Type)
 		switch recipesToExecute[i].recipe.Type {
 		case "browser":
 			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDocumentsDirectory, documentArchive, buchhalterMaxDownloadFilesPerReceipt)
@@ -263,8 +263,8 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 				fmt.Println(err)
 			}
 		}
-		rdx := repository.RunDataProvider{
-			Provider:         recipesToExecute[i].recipe.Provider,
+		rdx := repository.RunDataSupplier{
+			Supplier:         recipesToExecute[i].recipe.Supplier,
 			Version:          recipesToExecute[i].recipe.Version,
 			Status:           recipeResult.StatusText,
 			LastErrorMessage: recipeResult.LastErrorMessage,
@@ -279,7 +279,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			step:          recipeResult.StatusTextFormatted,
 			errorMessage:  recipeResult.LastErrorMessage,
 		})
-		logger.Info("Downloading invoices ... completed", "supplier", recipesToExecute[i].recipe.Provider, "supplier_type", recipesToExecute[i].recipe.Type, "duration", time.Since(startTime), "new_files", recipeResult.NewFilesCount)
+		logger.Info("Downloading invoices ... completed", "supplier", recipesToExecute[i].recipe.Supplier, "supplier_type", recipesToExecute[i].recipe.Type, "duration", time.Since(startTime), "new_files", recipeResult.NewFilesCount)
 
 		baseCountStep += stepCountInCurrentRecipe
 	}
@@ -294,8 +294,8 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	}
 	if user != nil && len(user.User.ID) > 0 {
 		uiDocumentUploadMessage := "Uploading documents to Buchhalter API ..."
-		if len(provider) > 0 {
-			uiDocumentUploadMessage = fmt.Sprintf("Uploading documents of provider %s to Buchhalter API ...", provider)
+		if len(supplier) > 0 {
+			uiDocumentUploadMessage = fmt.Sprintf("Uploading documents of supplier %s to Buchhalter API ...", supplier)
 		}
 		p.Send(viewMsgStatusUpdate{
 			title:    uiDocumentUploadMessage,
@@ -303,9 +303,9 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 		})
 		fileIndex := documentArchive.GetFileIndex()
 		for fileChecksum, fileInfo := range fileIndex {
-			// If the user is only working on a specific provider, skip the upload of documents for other providers
-			if len(provider) > 0 && fileInfo.Provider != provider {
-				logger.Info("Skipping document upload to Buchhalter API due to mismatch in provider", "file", fileInfo.Path, "selected_provider", provider, "file_provider", fileInfo.Provider)
+			// If the user is only working on a specific supplier, skip the upload of documents for other suppliers
+			if len(supplier) > 0 && fileInfo.Supplier != supplier {
+				logger.Info("Skipping document upload to Buchhalter API due to mismatch in supplier", "file", fileInfo.Path, "selected_supplier", supplier, "file_supplier", fileInfo.Supplier)
 				continue
 			}
 
@@ -323,10 +323,10 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 			}
 			logger.Info("Uploading document to Buchhalter API ... does not exist already", "file", fileInfo.Path, "checksum", fileChecksum)
 
-			err = buchhalterAPIClient.UploadDocument(fileInfo.Path, fileInfo.Provider)
+			err = buchhalterAPIClient.UploadDocument(fileInfo.Path, fileInfo.Supplier)
 			if err != nil {
 				// TODO Implement better error handling
-				logger.Error("Error uploading document to Buchhalter API", "file", fileInfo.Path, "provider", fileInfo.Provider, "error", err)
+				logger.Error("Error uploading document to Buchhalter API", "file", fileInfo.Path, "supplier", fileInfo.Supplier, "error", err)
 				continue
 			}
 		}
@@ -358,7 +358,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, provider, localOICDBChecksu
 	}
 }
 
-func prepareRecipes(logger *slog.Logger, provider string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) []recipeToExecute {
+func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) []recipeToExecute {
 	developmentMode := viper.GetBool("dev")
 	logger.Info("Loading recipes for suppliers ...", "development_mode", developmentMode)
 	loadRecipeResult, err := recipeParser.LoadRecipes(developmentMode)
@@ -368,18 +368,18 @@ func prepareRecipes(logger *slog.Logger, provider string, vaultProvider *vault.P
 		fmt.Println(err)
 	}
 
-	// Run single provider recipe
+	// Run single supplier recipe
 	var r []recipeToExecute
 	stepCount := 0
 	vaultItems := vaultProvider.VaultItems
-	if provider != "" {
-		logger.Info("Search for credentials for suppliers recipe ...", "supplier", provider)
+	if supplier != "" {
+		logger.Info("Search for credentials for suppliers recipe ...", "supplier", supplier)
 		for i := range vaultItems {
 			// Check if a recipe exists for the item
 			recipe := recipeParser.GetRecipeForItem(vaultItems[i], vaultProvider.UrlsByItemId)
-			if recipe != nil && provider == recipe.Provider {
+			if recipe != nil && supplier == recipe.Supplier {
 				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
-				logger.Info("Search for credentials for suppliers recipe ... found", "supplier", provider, "credentials_id", vaultItems[i].ID)
+				logger.Info("Search for credentials for suppliers recipe ... found", "supplier", supplier, "credentials_id", vaultItems[i].ID)
 			}
 		}
 
@@ -393,7 +393,7 @@ func prepareRecipes(logger *slog.Logger, provider string, vaultProvider *vault.P
 			if recipe != nil {
 				stepCount = stepCount + len(recipe.Steps)
 				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
-				logger.Info("Search for matching pairs of recipes for supplier recipes and credentials ... found", "supplier", recipe.Provider, "credentials_id", vaultItems[i].ID)
+				logger.Info("Search for matching pairs of recipes for supplier recipes and credentials ... found", "supplier", recipe.Supplier, "credentials_id", vaultItems[i].ID)
 			}
 		}
 	}

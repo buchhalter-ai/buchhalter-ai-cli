@@ -50,9 +50,9 @@ type StepResult struct {
 	Break   bool
 }
 
-func InitProviderDirectories(buchhalterDirectory, provider string) (string, string, error) {
-	downloadsDirectory := filepath.Join(buchhalterDirectory, "_tmp", provider)
-	documentsDirectory := filepath.Join(buchhalterDirectory, provider)
+func InitSupplierDirectories(buchhalterDirectory, supplier string) (string, string, error) {
+	downloadsDirectory := filepath.Join(buchhalterDirectory, "_tmp", supplier)
+	documentsDirectory := filepath.Join(buchhalterDirectory, supplier)
 	err := CreateDirectoryIfNotExists(downloadsDirectory)
 	if err != nil {
 		return "", "", err

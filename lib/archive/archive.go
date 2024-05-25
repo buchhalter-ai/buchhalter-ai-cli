@@ -21,7 +21,7 @@ type DocumentArchive struct {
 
 type File struct {
 	Path     string
-	Provider string
+	Supplier string
 }
 
 func NewDocumentArchive(logger *slog.Logger, archiveDirectory string) *DocumentArchive {
@@ -55,7 +55,7 @@ func (a *DocumentArchive) BuildArchiveIndex() error {
 			}
 			a.fileIndex[hash] = File{
 				Path:     filePath,
-				Provider: a.determineProviderFromPath(filePath),
+				Supplier: a.determineSupplierFromPath(filePath),
 			}
 		}
 		return nil
@@ -87,7 +87,7 @@ func (a *DocumentArchive) AddFile(filePath string) error {
 
 	a.fileIndex[hash] = File{
 		Path:     filePath,
-		Provider: a.determineProviderFromPath(filePath),
+		Supplier: a.determineSupplierFromPath(filePath),
 	}
 	return nil
 }
@@ -138,7 +138,7 @@ func (a *DocumentArchive) GetFileIndex() map[string]File {
 	return a.fileIndex
 }
 
-func (a *DocumentArchive) determineProviderFromPath(filePath string) string {
+func (a *DocumentArchive) determineSupplierFromPath(filePath string) string {
 	p := path.Dir(filePath)
 	_, file := filepath.Split(p)
 	return file

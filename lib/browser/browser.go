@@ -68,7 +68,7 @@ func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchh
 
 func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) utils.RecipeResult {
 	// Init browser
-	b.logger.Info("Starting chrome browser driver ...", "recipe", recipe.Provider, "recipe_version", recipe.Version)
+	b.logger.Info("Starting chrome browser driver ...", "recipe", recipe.Supplier, "recipe_version", recipe.Version)
 	ctx, cancel, err := cu.New(cu.NewConfig(
 		cu.WithContext(b.browserCtx),
 	))
@@ -94,10 +94,10 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 		}
 		b.ChromeVersion = strings.TrimSpace(b.ChromeVersion)
 	}
-	b.logger.Info("Starting chrome browser driver ... completed ", "recipe", recipe.Provider, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
+	b.logger.Info("Starting chrome browser driver ... completed ", "recipe", recipe.Supplier, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
 
 	// create download directories
-	b.downloadsDirectory, b.documentsDirectory, err = utils.InitProviderDirectories(b.buchhalterDocumentsDirectory, recipe.Provider)
+	b.downloadsDirectory, b.documentsDirectory, err = utils.InitSupplierDirectories(b.buchhalterDocumentsDirectory, recipe.Supplier)
 	if err != nil {
 		// TODO Implement error handling
 		fmt.Println(err)
@@ -130,7 +130,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 	var result utils.RecipeResult
 	for _, step := range recipe.Steps {
 		p.Send(utils.ViewMsgStatusAndDescriptionUpdate{
-			Title:       fmt.Sprintf("Downloading invoices from %s (%d/%d):", recipe.Provider, n, stepCountInCurrentRecipe),
+			Title:       fmt.Sprintf("Downloading invoices from %s (%d/%d):", recipe.Supplier, n, stepCountInCurrentRecipe),
 			Description: step.Description,
 		})
 
@@ -195,18 +195,18 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 			if lastStepResult.Status == "success" {
 				result = utils.RecipeResult{
 					Status:              "success",
-					StatusText:          recipe.Provider + ": " + newDocumentsText,
-					StatusTextFormatted: "- " + textStyleBold(recipe.Provider) + ": " + newDocumentsText,
-					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Provider, recipe.Version, n, step.Action),
+					StatusText:          recipe.Supplier + ": " + newDocumentsText,
+					StatusTextFormatted: "- " + textStyleBold(recipe.Supplier) + ": " + newDocumentsText,
+					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Supplier, recipe.Version, n, step.Action),
 					LastStepDescription: step.Description,
 					NewFilesCount:       b.newFilesCount,
 				}
 			} else {
 				result = utils.RecipeResult{
 					Status:              "error",
-					StatusText:          recipe.Provider + "aborted with error.",
-					StatusTextFormatted: "x " + textStyleBold(recipe.Provider) + " aborted with error.",
-					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Provider, recipe.Version, n, step.Action),
+					StatusText:          recipe.Supplier + "aborted with error.",
+					StatusTextFormatted: "x " + textStyleBold(recipe.Supplier) + " aborted with error.",
+					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Supplier, recipe.Version, n, step.Action),
 					LastStepDescription: step.Description,
 					LastErrorMessage:    lastStepResult.Message,
 					NewFilesCount:       b.newFilesCount,
@@ -222,9 +222,9 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 		case <-time.After(b.recipeTimeout):
 			result = utils.RecipeResult{
 				Status:              "error",
-				StatusText:          recipe.Provider + " aborted with timeout.",
-				StatusTextFormatted: "x " + textStyleBold(recipe.Provider) + " aborted with timeout.",
-				LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Provider, recipe.Version, n, step.Action),
+				StatusText:          recipe.Supplier + " aborted with timeout.",
+				StatusTextFormatted: "x " + textStyleBold(recipe.Supplier) + " aborted with timeout.",
+				LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Supplier, recipe.Version, n, step.Action),
 				LastStepDescription: step.Description,
 				NewFilesCount:       b.newFilesCount,
 			}
