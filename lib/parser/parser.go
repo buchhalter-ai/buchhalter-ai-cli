@@ -22,8 +22,8 @@ type RecipeParser struct {
 	configDirectory  string
 	storageDirectory string
 
-	recipeProviderByDomain map[string]string
-	recipeByProvider       map[string]Recipe
+	recipeSupplierByDomain map[string]string
+	recipeBySupplier       map[string]Recipe
 
 	database     Database
 	OicdbVersion string
@@ -36,7 +36,8 @@ type Database struct {
 }
 
 type Recipe struct {
-	Provider string   `json:"provider"`
+	// TODO Rename Prodiver to Supplier
+	Supplier string   `json:"supplier"`
 	Domains  []string `json:"domains"`
 	Version  string   `json:"version"`
 	Type     string   `json:"type"`
@@ -78,8 +79,8 @@ func NewRecipeParser(logger *slog.Logger, buchhalterConfigDirectory, buchhalterD
 		configDirectory:  buchhalterConfigDirectory,
 		storageDirectory: buchhalterDirectory,
 
-		recipeProviderByDomain: make(map[string]string),
-		recipeByProvider:       make(map[string]Recipe),
+		recipeSupplierByDomain: make(map[string]string),
+		recipeBySupplier:       make(map[string]Recipe),
 		database:               Database{},
 	}
 }
@@ -119,9 +120,9 @@ func (p *RecipeParser) LoadRecipes(developmentMode bool) (bool, error) {
 
 	for i := 0; i < len(p.database.Recipes); i++ {
 		for n := 0; n < len(p.database.Recipes[i].Domains); n++ {
-			p.recipeProviderByDomain[p.database.Recipes[i].Domains[n]] = p.database.Recipes[i].Provider
+			p.recipeSupplierByDomain[p.database.Recipes[i].Domains[n]] = p.database.Recipes[i].Supplier
 		}
-		p.recipeByProvider[p.database.Recipes[i].Provider] = p.database.Recipes[i]
+		p.recipeBySupplier[p.database.Recipes[i].Supplier] = p.database.Recipes[i]
 	}
 
 	return true, nil
@@ -130,7 +131,7 @@ func (p *RecipeParser) LoadRecipes(developmentMode bool) (bool, error) {
 func (p *RecipeParser) GetRecipeForItem(item vault.Item, urlsByItemId map[string][]string) *Recipe {
 	// Build regex pattern with all urls from the vault item
 	var pattern string
-	for domain := range p.recipeProviderByDomain {
+	for domain := range p.recipeSupplierByDomain {
 		pattern = "^(https?://)?" + regexp.QuoteMeta(domain)
 
 		// Try to match all item urls with a recipe url (e.g. digitalocean login url) */
@@ -138,7 +139,7 @@ func (p *RecipeParser) GetRecipeForItem(item vault.Item, urlsByItemId map[string
 			matched, _ := regexp.MatchString(pattern, urlsByItemId[item.ID][i])
 			if matched {
 				// Return matching recipe
-				recipe := p.recipeByProvider[p.recipeProviderByDomain[domain]]
+				recipe := p.recipeBySupplier[p.recipeSupplierByDomain[domain]]
 				return &recipe
 			}
 		}
@@ -196,7 +197,7 @@ func (p *RecipeParser) loadLocalRecipes(buchhalterDirectory string) error {
 		if err != nil {
 			return err
 		}
-		n := p.getRecipeIndexByProvider(filenameWithoutExtension)
+		n := p.getRecipeIndexBySupplier(filenameWithoutExtension)
 		if n >= 0 {
 			// Replace recipe if exists
 			var newRecipe Recipe
@@ -205,7 +206,7 @@ func (p *RecipeParser) loadLocalRecipes(buchhalterDirectory string) error {
 				return err
 			}
 			p.database.Recipes[n] = newRecipe
-			p.logger.Info("Replaced official recipe with local recipes for suppliers", "supplier", newRecipe.Provider)
+			p.logger.Info("Replaced official recipe with local recipes for suppliers", "supplier", newRecipe.Supplier)
 
 		} else {
 			// Add recipe if not exists
@@ -215,16 +216,16 @@ func (p *RecipeParser) loadLocalRecipes(buchhalterDirectory string) error {
 				return err
 			}
 			p.database.Recipes = append(p.database.Recipes, recipe)
-			p.logger.Info("Found and loaded local recipes for supplier", "supplier", recipe.Provider)
+			p.logger.Info("Found and loaded local recipes for supplier", "supplier", recipe.Supplier)
 		}
 	}
 
 	return nil
 }
 
-func (p *RecipeParser) getRecipeIndexByProvider(provider string) int {
+func (p *RecipeParser) getRecipeIndexBySupplier(supplier string) int {
 	for i := 0; i < len(p.database.Recipes); i++ {
-		if p.database.Recipes[i].Provider == provider {
+		if p.database.Recipes[i].Supplier == supplier {
 			return i
 		}
 	}

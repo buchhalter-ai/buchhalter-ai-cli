@@ -105,7 +105,7 @@ The `--log` flag will write a activities into a log file placed at `<buchhalter_
 
 By default, all invoices are stored in a folder called "buchhalter" in your users' folder (e.g. `/Users/bernd/buchhalter`).
 You can place local oicdb recipes (for testing or modifications) in the `_local/recipes` subfolder of your buchhalter directory.
-You can use the `--dev` flag to overwrite recipes for a specific provider with your local ones.
+You can use the `--dev` flag to overwrite recipes for a specific supplier with your local ones.
 
 Example: Load all invoices from Hetzner Cloud (using your local recipe stored in `buchhalter/_local/recipes/hetzner.json`):
 

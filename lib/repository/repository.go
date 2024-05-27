@@ -42,9 +42,9 @@ type Metric struct {
 	OS            string `json:"os,omitempty"`
 }
 
-type RunData []RunDataProvider
-type RunDataProvider struct {
-	Provider         string  `json:"provider,omitempty"`
+type RunData []RunDataSupplier
+type RunDataSupplier struct {
+	Supplier         string  `json:"supplier,omitempty"`
 	Version          string  `json:"version,omitempty"`
 	Status           string  `json:"status,omitempty"`
 	LastErrorMessage string  `json:"lastErrorMessage,omitempty"`
@@ -365,7 +365,7 @@ func (c *BuchhalterAPIClient) DoesDocumentExist(documentHash string) (bool, erro
 	return true, nil
 }
 
-func (c *BuchhalterAPIClient) UploadDocument(filePath, provider string) error {
+func (c *BuchhalterAPIClient) UploadDocument(filePath, supplier string) error {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -395,15 +395,15 @@ func (c *BuchhalterAPIClient) UploadDocument(filePath, provider string) error {
 		return err
 	}
 
-	// Add provider to request
+	// Add supplier to request
 	supplierWriter, err := writer.CreateFormField("supplier")
 	if err != nil {
-		c.logger.Error("Error creating form `supplier`", "provider", provider, "error", err)
+		c.logger.Error("Error creating form `supplier`", "supplier", supplier, "error", err)
 		return err
 	}
-	buf := bytes.NewBufferString(provider)
+	buf := bytes.NewBufferString(supplier)
 	if _, err = io.Copy(supplierWriter, buf); err != nil {
-		c.logger.Error("Error copying provider", "provider", provider, "error", err)
+		c.logger.Error("Error copying supplier", "supplier", supplier, "error", err)
 		return err
 	}
 
@@ -422,10 +422,10 @@ func (c *BuchhalterAPIClient) UploadDocument(filePath, provider string) error {
 	if err != nil {
 		return err
 	}
-	c.logger.Info("Upload document to API", "url", apiUrl, "file", filePath, "provider", provider)
+	c.logger.Info("Upload document to API", "url", apiUrl, "file", filePath, "supplier", supplier)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiUrl, body)
 	if err != nil {
-		c.logger.Error("Error creating request", "url", apiUrl, "file", filePath, "provider", provider, "error", err)
+		c.logger.Error("Error creating request", "url", apiUrl, "file", filePath, "supplier", supplier, "error", err)
 		return err
 	}
 
@@ -435,7 +435,7 @@ func (c *BuchhalterAPIClient) UploadDocument(filePath, provider string) error {
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.apiToken))
 	resp, err := client.Do(req)
 	if err != nil {
-		c.logger.Error("Error sending request", "url", apiUrl, "file", filePath, "provider", provider, "error", err)
+		c.logger.Error("Error sending request", "url", apiUrl, "file", filePath, "supplier", supplier, "error", err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -444,22 +444,22 @@ func (c *BuchhalterAPIClient) UploadDocument(filePath, provider string) error {
 		var errorResponse ErrorAPIResponse
 		err = json.NewDecoder(resp.Body).Decode(&errorResponse)
 		if err != nil {
-			c.logger.Error("Error decoding error response", "url", apiUrl, "file", filePath, "provider", provider, "status_code", resp.StatusCode, "error", err)
+			c.logger.Error("Error decoding error response", "url", apiUrl, "file", filePath, "supplier", supplier, "status_code", resp.StatusCode, "error", err)
 			return err
 		}
 
-		c.logger.Error("Upload document to API ... failed", "url", apiUrl, "file", filePath, "provider", provider, "status_code", resp.StatusCode, "error_code", errorResponse.ErrorCode, "error_message", errorResponse.ErrorMessage)
+		c.logger.Error("Upload document to API ... failed", "url", apiUrl, "file", filePath, "supplier", supplier, "status_code", resp.StatusCode, "error_code", errorResponse.ErrorCode, "error_message", errorResponse.ErrorMessage)
 		return fmt.Errorf("http request to %s failed with status code: %d (code: %s, message %s)", apiUrl, resp.StatusCode, errorResponse.ErrorCode, errorResponse.ErrorMessage)
 	}
 
 	var uploadResponse DocumentUploadResponse
 	err = json.NewDecoder(resp.Body).Decode(&uploadResponse)
 	if err != nil {
-		c.logger.Error("Error decoding upload response", "url", apiUrl, "file", filePath, "provider", provider, "error", err)
+		c.logger.Error("Error decoding upload response", "url", apiUrl, "file", filePath, "supplier", supplier, "error", err)
 		return err
 	}
 
-	c.logger.Info("Upload document to API ... success", "url", apiUrl, "file", filePath, "provider", provider, "status_code", resp.StatusCode, "status", uploadResponse.Status, "document_id", uploadResponse.DocumentID)
+	c.logger.Info("Upload document to API ... success", "url", apiUrl, "file", filePath, "supplier", supplier, "status_code", resp.StatusCode, "status", uploadResponse.Status, "document_id", uploadResponse.DocumentID)
 
 	return nil
 }
