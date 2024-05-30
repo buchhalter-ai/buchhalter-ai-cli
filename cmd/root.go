@@ -197,3 +197,17 @@ func initializeLogger(logSetting, developmentMode bool, buchhalterDir string) (*
 
 	return logger, nil
 }
+
+func exitWithLogo(message string) {
+	s := fmt.Sprintf(
+		"%s\n%s\n%s%s\n%s\n\n%s",
+		headerStyle(LogoText),
+		textStyle("Automatically sync all your incoming invoices from your suppliers. "),
+		textStyle("More information at: "),
+		textStyleBold("https://buchhalter.ai"),
+		textStyleGrayBold(fmt.Sprintf("Using CLI %s", CliVersion)),
+		textStyle(message),
+	)
+	fmt.Println(s)
+	os.Exit(1)
+}
