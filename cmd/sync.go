@@ -55,13 +55,13 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	developmentMode := viper.GetBool("dev")
 	logSetting, err := cmd.Flags().GetBool("log")
 	if err != nil {
-		fmt.Printf("Error reading log flag: %s\n", err)
-		os.Exit(1)
+		exitMessage := fmt.Sprintf("Error reading log flag: %s", err)
+		exitWithLogo(exitMessage)
 	}
 	logger, err := initializeLogger(logSetting, developmentMode, buchhalterDirectory)
 	if err != nil {
-		fmt.Printf("Error on initializing logging: %s\n", err)
-		os.Exit(1)
+		exitMessage := fmt.Sprintf("Error on initializing logging: %s", err)
+		exitWithLogo(exitMessage)
 	}
 	logger.Info("Booting up", "development_mode", developmentMode)
 	defer logger.Info("Shutting down")
@@ -78,8 +78,8 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, vaultConfigBinary, vaultConfigBase, vaultConfigTag)
 	if err != nil {
 		logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
-		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
-		os.Exit(1)
+		exitMessage := fmt.Sprintln(vaultProvider.GetHumanReadableErrorMessage(err))
+		exitWithLogo(exitMessage)
 	}
 
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
@@ -88,15 +88,15 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	localOICDBChecksum, err := recipeParser.GetChecksumOfLocalOICDB()
 	if err != nil {
 		logger.Error("Error calculating checksum of local Open Invoice Collector Database", "error", err)
-		fmt.Printf("Error calculating checksum of local Open Invoice Collector Database: %s\n", err)
-		os.Exit(1)
+		exitMessage := fmt.Sprintf("Error calculating checksum of local Open Invoice Collector Database: %s", err)
+		exitWithLogo(exitMessage)
 	}
 
 	localOICDBSchemaChecksum, err := recipeParser.GetChecksumOfLocalOICDBSchema()
 	if err != nil {
 		logger.Error("Error calculating checksum of local Open Invoice Collector Database Schema", "error", err)
-		fmt.Printf("Error calculating checksum of local Open Invoice Collector Database Schema: %s\n", err)
-		os.Exit(1)
+		exitMessage := fmt.Sprintf("Error calculating checksum of local Open Invoice Collector Database Schema: %s", err)
+		exitWithLogo(exitMessage)
 	}
 
 	apiHost := viper.GetString("buchhalter_api_host")
@@ -104,8 +104,8 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiToken, CliVersion)
 	if err != nil {
 		logger.Error("Error initializing Buchhalter API client", "error", err)
-		fmt.Printf("Error initializing Buchhalter API client: %s\n", err)
-		os.Exit(1)
+		exitMessage := fmt.Sprintf("Error initializing Buchhalter API client: %s", err)
+		exitWithLogo(exitMessage)
 	}
 
 	viewModel := initialModel(logger, vaultProvider, buchhalterAPIClient, recipeParser)
@@ -115,16 +115,16 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	vaultItems, err := vaultProvider.LoadVaultItems()
 	if err != nil {
 		logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
-		fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
-		os.Exit(1)
+		exitMessage := fmt.Sprintln(vaultProvider.GetHumanReadableErrorMessage(err))
+		exitWithLogo(exitMessage)
 	}
 
 	// Check if vault items are available
 	if len(vaultItems) == 0 {
 		// TODO Add link with help article
 		logger.Error("No credential items loaded from vault", "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
-		fmt.Printf("No credential items found in vault '%s' with tag '%s'. Please check your 1password vault items.\n", vaultConfigBase, vaultConfigTag)
-		os.Exit(1)
+		exitMessage := fmt.Sprintf("No credential items found in vault '%s' with tag '%s'. Please check your 1password vault items.", vaultConfigBase, vaultConfigTag)
+		exitWithLogo(exitMessage)
 	}
 	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
 
@@ -133,8 +133,8 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 
 	if _, err := p.Run(); err != nil {
 		logger.Error("Error running program", "error", err)
-		fmt.Printf("Error running program: %s\n", err)
-		os.Exit(1)
+		exitMessage := fmt.Sprintf("Error running program: %s", err)
+		exitWithLogo(exitMessage)
 	}
 }
 
@@ -161,9 +161,9 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 
 	err = buchhalterAPIClient.UpdateOpenInvoiceCollectorDBSchemaIfAvailable(localOICDBSchemaChecksum)
 	if err != nil {
+		// TODO Implement better error handling
 		logger.Error("Error checking for OICDB schema updates", "error", err)
 		fmt.Println(err)
-		os.Exit(1)
 	}
 
 	developmentMode := viper.GetBool("dev")
@@ -177,9 +177,9 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 
 		err = buchhalterAPIClient.UpdateOpenInvoiceCollectorDBIfAvailable(localOICDBChecksum)
 		if err != nil {
+			// TODO Implement better error handling
 			logger.Error("Error checking for OICDB repository updates", "error", err)
 			fmt.Println(err)
-			os.Exit(1)
 		}
 	}
 

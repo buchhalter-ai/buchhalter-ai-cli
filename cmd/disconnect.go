@@ -28,13 +28,13 @@ func RunDisconnectCommand(cmd *cobra.Command, cmdArgs []string) {
 	developmentMode := viper.GetBool("dev")
 	logSetting, err := cmd.Flags().GetBool("log")
 	if err != nil {
-		fmt.Printf("Error reading log flag: %s\n", err)
-		os.Exit(1)
+		exitMessage := fmt.Sprintf("Error reading log flag: %s", err)
+		exitWithLogo(exitMessage)
 	}
 	logger, err := initializeLogger(logSetting, developmentMode, buchhalterDirectory)
 	if err != nil {
-		fmt.Printf("Error on initializing logging: %s\n", err)
-		os.Exit(1)
+		exitMessage := fmt.Sprintf("Error on initializing logging: %s", err)
+		exitWithLogo(exitMessage)
 	}
 	logger.Info("Booting up", "development_mode", developmentMode)
 	defer logger.Info("Shutting down")
@@ -58,8 +58,8 @@ func RunDisconnectCommand(cmd *cobra.Command, cmdArgs []string) {
 	err = buchhalterConfig.DeleteLocalAPIConfig()
 	if err != nil {
 		logger.Error("Error deleting API token file", "error", err)
-		fmt.Println(textStyle("Disconnecting from the Buchhalter Platform ... unsuccessful. Please try again."))
-		os.Exit(1)
+		exitMessage := fmt.Sprintln(textStyle("Disconnecting from the Buchhalter Platform ... unsuccessful. Please try again."))
+		exitWithLogo(exitMessage)
 	}
 
 	fmt.Println(textStyle("Disconnecting from the Buchhalter Platform ... successful"))
