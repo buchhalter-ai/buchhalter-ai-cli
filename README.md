@@ -5,14 +5,27 @@ It uses the [open invoice collector database](https://github.com/oicdb/oicdb-rep
 
 ## Installation
 
-Install the buchhalter-cli by cloning the repository and running the main.go file.
-We also plan to provide a brew package (WIP).
+### Pre-Compiled Binary
+
+Download the pre-compiled binary from our [Release section](https://github.com/buchhalter-ai/buchhalter-ai-cli/releases).
+
+### Homebrew
 
 ```sh
-git clone git@github.com:buchhalter-ai/buchhalter-ai-cli.git
-cd buchhalter-ai-cli
-make build
-bin/buchhalter --help
+$ brew tap buchhalter-ai/buchhalter
+$ brew install buchhalter-ai
+$ buchhalter version
+```
+
+### From Source code
+
+Install the buchhalter-cli by cloning the repository and running the main.go file.
+
+```sh
+$ git clone git@github.com:buchhalter-ai/buchhalter-ai-cli.git
+$ cd buchhalter-ai-cli
+$ make build
+$ bin/buchhalter version
 ```
 
 ## Usage
