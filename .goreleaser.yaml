@@ -36,10 +36,10 @@ archives:
   - format: tar.gz
     name_template: >-
       {{- .ProjectName }}_
-      {{- title .Os }}_
+      {{- if eq .Os "darwin" }}macOS_
+      {{- else }}{{- title .Os }}_{{ end }}
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
-      {{- else if eq .Arch "darwin" }}macOS
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end -}}
     format_overrides:
