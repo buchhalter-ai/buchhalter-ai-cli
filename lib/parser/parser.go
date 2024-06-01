@@ -55,7 +55,8 @@ type Step struct {
 	When         struct {
 		URL string `json:"url"`
 	} `json:"when,omitempty"`
-	Oauth2 struct {
+	SleepDuration int `json:"sleepDuration,omitempty"`
+	Oauth2        struct {
 		AuthUrl            string `json:"authUrl"`
 		TokenUrl           string `json:"tokenUrl"`
 		RedirectUrl        string `json:"redirectUrl"`

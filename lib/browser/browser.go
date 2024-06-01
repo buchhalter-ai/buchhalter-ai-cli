@@ -380,6 +380,10 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 
 	// Click on download link (for client-side js stuff)
 	x := 0
+	sleepTime := 1500 * time.Millisecond
+	if step.SleepDuration > 0 {
+		sleepTime = time.Duration(step.SleepDuration) * time.Millisecond
+	}
 	for _, n := range nodes {
 		// Only download maxFilesDownloaded files
 		if b.maxFilesDownloaded > 0 && x >= b.maxFilesDownloaded {
@@ -414,7 +418,7 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 
 		// Delay clicks to prevent too many downloads at once/rate limiting
 		b.logger.Debug("Executing recipe step ... sleeping a bit before we trigger the next download", "action", step.Action, "loop", x)
-		time.Sleep(1500 * time.Millisecond)
+		time.Sleep(sleepTime)
 		x++
 	}
 	b.logger.Debug("Executing recipe step ... waiting for downloads to complete", "action", step.Action)
