@@ -429,9 +429,9 @@ const (
 
 var (
 	helpStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#D6D58E")).Margin(1, 0)
-	dotStyle      = helpStyle.Copy().UnsetMargins()
+	dotStyle      = helpStyle.UnsetMargins()
 	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#EA4335"))
-	durationStyle = dotStyle.Copy()
+	durationStyle = dotStyle
 	spinnerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#D6D58E"))
 	appStyle      = lipgloss.NewStyle().Margin(1, 2, 0, 2)
 	choices       = []string{"Yes", "No", "Always yes (don't ask again)"}
