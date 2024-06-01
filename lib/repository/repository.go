@@ -187,7 +187,8 @@ func (c *BuchhalterAPIClient) updateExists(currentChecksum, apiEndpoint string) 
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return false, fmt.Errorf("error sending request")
+		c.logger.Error("Error sending request", "url", apiUrl, "error", err)
+		return false, fmt.Errorf("error sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -246,6 +247,7 @@ func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVer
 
 	resp, err := client.Do(req)
 	if err != nil {
+		c.logger.Error("Error sending request", "url", apiUrl, "error", err)
 		return fmt.Errorf("error sending request: %w", err)
 	}
 	defer resp.Body.Close()
