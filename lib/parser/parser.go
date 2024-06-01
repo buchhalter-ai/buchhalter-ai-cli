@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"buchhalter/lib/vault"
 
@@ -149,8 +150,10 @@ func (p *RecipeParser) GetRecipeForItem(item vault.Item, urlsByItemId map[string
 }
 
 func validateRecipes(buchhalterConfigDirectory string) (bool, error) {
-	schemaLoader := gojsonschema.NewReferenceLoader("file://" + filepath.Join(buchhalterConfigDirectory, "oicdb.schema.json"))
-	documentLoader := gojsonschema.NewReferenceLoader("file://" + filepath.Join(buchhalterConfigDirectory, "oicdb.json"))
+	oicdbFile := "file://" + filepath.Join(buchhalterConfigDirectory, "oicdb.json")
+	oicdbSchemaFile := "file://" + filepath.Join(buchhalterConfigDirectory, "oicdb.schema.json")
+	schemaLoader := gojsonschema.NewReferenceLoader(oicdbSchemaFile)
+	documentLoader := gojsonschema.NewReferenceLoader(oicdbFile)
 
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
 	if err != nil {
@@ -161,11 +164,13 @@ func validateRecipes(buchhalterConfigDirectory string) (bool, error) {
 		return true, nil
 	}
 
-	fmt.Printf("The document is not valid. see errors :\n")
-	for _, desc := range result.Errors() {
-		fmt.Printf("- %s\n", desc)
+	// TODO Create our own error type here (validation error)
+	errorMessageParts := []string{}
+	for _, errorDescription := range result.Errors() {
+		errorMessageParts = append(errorMessageParts, errorDescription.String())
 	}
-	return false, nil
+	err = fmt.Errorf("the document %s (compared to schema %s) is not valid. See errors: %s", oicdbFile, oicdbSchemaFile, strings.Join(errorMessageParts, ", "))
+	return false, err
 }
 
 func (p *RecipeParser) loadLocalRecipes(buchhalterDirectory string) error {
