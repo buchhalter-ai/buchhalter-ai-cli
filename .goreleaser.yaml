@@ -2,9 +2,14 @@
 # vim: set ts=2 sw=2 tw=0 fo=cnqoj
 version: 1
 
+project_name: buchhalter-ai
+
 before:
   hooks:
     - go mod tidy
+
+metadata:
+  mod_timestamp: "{{ .CommitTimestamp }}"
 
 builds:
   - env:
@@ -13,16 +18,29 @@ builds:
       - linux
       - windows
       - darwin
+    goarch:
+      - "386"
+      - amd64
+      - arm
+      - arm64
+      - ppc64
+    goarm:
+      - "7"
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    #ldflags:
+    #  - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{ .CommitDate }} -X main.builtBy=goreleaser -X main.treeState={{ .IsGitDirty }}
+
+# TODO: Think about to verify the mac builds, see https://goreleaser.com/customization/notarize/
 
 archives:
   - format: tar.gz
     name_template: >-
-      {{ .ProjectName }}_
+      {{- .ProjectName }}_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end -}}
     format_overrides:
       - goos: windows
         format: zip
@@ -33,3 +51,25 @@ changelog:
     exclude:
       - "^docs:"
       - "^test:"
+
+# Homebrew (macOS)
+brews:
+  repository:
+    owner: buchhalter-ai
+    name: homebrew-buchhalter
+
+  directory: Formula
+
+  homepage: "https://buchhalter.ai/"
+  description: "Automatically sync all your incoming invoices from your suppliers."
+
+  license: "SSPL-1.0"
+
+  test: |
+    system "#{bin}/buchhalter version"
+
+  # Optionally a token can be provided, if it differs from the token
+  # provided to GoReleaser
+  token: "{{ .Env.GITHUB_PERSONAL_AUTH_TOKEN }}"
+
+# TODO Add a proper release message, see https://github.com/goreleaser/goreleaser/blob/main/.goreleaser.yaml#L383C1-L402C14
