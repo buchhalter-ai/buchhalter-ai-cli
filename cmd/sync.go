@@ -9,7 +9,6 @@ import (
 
 	"buchhalter/lib/archive"
 	"buchhalter/lib/browser"
-	"buchhalter/lib/client"
 	"buchhalter/lib/parser"
 	"buchhalter/lib/repository"
 	"buchhalter/lib/utils"
@@ -251,7 +250,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 				fmt.Println(err)
 			}
 		case "client":
-			clientDriver := client.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDocumentsDirectory, documentArchive)
+			clientDriver := browser.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDocumentsDirectory, documentArchive)
 			recipeResult = clientDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = clientDriver.ChromeVersion

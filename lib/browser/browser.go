@@ -1,5 +1,8 @@
 package browser
 
+// Client to control a headless browser via selectors.
+// Selectors in this context are xpath, css, etc.
+
 import (
 	"context"
 	"fmt"
@@ -19,17 +22,12 @@ import (
 
 	cu "github.com/Davincible/chromedp-undetected"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
-)
-
-var (
-	textStyleBold = lipgloss.NewStyle().Bold(true).Render
 )
 
 type BrowserDriver struct {
