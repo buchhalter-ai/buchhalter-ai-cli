@@ -93,6 +93,13 @@ func RunConnectCommand(cmd *cobra.Command, cmdArgs []string) {
 		return
 	}
 
+	if cliSyncResponse == nil {
+		logger.Error("GetAuthenticatedUser API call successful, but no valid response due to wrong API key")
+		fmt.Println(textStyle("Connecting to the Buchhalter Platform ... unsuccessful"))
+		fmt.Println(textStyle("Please check your API-Token at https://app.buchhalter.ai/token and try again."))
+		return
+	}
+
 	fmt.Printf("Hi %s (%s), you are connected to the Buchhalter Platform.\n", cliSyncResponse.User.Name, cliSyncResponse.User.Email)
 	fmt.Println("Your teams:")
 	for _, team := range cliSyncResponse.User.Teams {
