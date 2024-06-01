@@ -29,8 +29,19 @@ const (
 `
 )
 
-const (
-	CliVersion = "0.0.1"
+var (
+	// cliVersion is the version of the software.
+	// Typically a branch or tag name.
+	// Is set at compile time via ldflags.
+	cliVersion = "main"
+
+	// cliCommitHash reflects the current git sha.
+	// Is set at compile time via ldflags.
+	cliCommitHash = "none"
+
+	// cliBuildTime is the compile date + time.
+	// Is set at compile time via ldflags.
+	cliBuildTime = "unknown"
 )
 
 var (
@@ -56,7 +67,11 @@ var rootCmd = &cobra.Command{
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
-func Execute() {
+func Execute(version, commitHash, buildTime string) {
+	cliVersion = version
+	cliCommitHash = commitHash
+	cliBuildTime = buildTime
+
 	err := rootCmd.Execute()
 	if err != nil {
 		fmt.Println(err)
@@ -205,7 +220,7 @@ func exitWithLogo(message string) {
 		textStyle("Automatically sync all your incoming invoices from your suppliers. "),
 		textStyle("More information at: "),
 		textStyleBold("https://buchhalter.ai"),
-		textStyleGrayBold(fmt.Sprintf("Using CLI %s", CliVersion)),
+		textStyleGrayBold(fmt.Sprintf("Using CLI %s", cliVersion)),
 		textStyle(message),
 	)
 	fmt.Println(s)

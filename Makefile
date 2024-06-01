@@ -6,7 +6,7 @@ help: ## Outputs the help
 
 .PHONY: build
 build: ## Compiles the application
-	go build -race -o bin/buchhalter main.go
+	go build -race -ldflags "-X main.cliVersion=`git rev-parse --abbrev-ref HEAD` -X 'main.buildTime=`date "+%Y-%m-%d %H:%M:%S %z"`' -X main.commitHash=`git log --pretty=format:'%H' -n 1`" -o bin/buchhalter
 
 .PHONY: sync
 sync: ## Synchronize all invoices from your suppliers

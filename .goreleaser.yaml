@@ -27,8 +27,8 @@ builds:
     goarm:
       - "7"
     mod_timestamp: "{{ .CommitTimestamp }}"
-    #ldflags:
-    #  - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{ .CommitDate }} -X main.builtBy=goreleaser -X main.treeState={{ .IsGitDirty }}
+    ldflags:
+      - -X main.cliVersion={{ .Version }} -X main.commitHash={{ .Commit }} -X main.buildTime={{ .CommitDate }}
 
 # TODO: Think about to verify the mac builds, see https://goreleaser.com/customization/notarize/
 

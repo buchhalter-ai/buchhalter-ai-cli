@@ -46,8 +46,11 @@ func RunDisconnectCommand(cmd *cobra.Command, cmdArgs []string) {
 		textStyle("Automatically sync all your incoming invoices from your suppliers. "),
 		textStyle("More information at: "),
 		textStyleBold("https://buchhalter.ai"),
-		textStyleGrayBold(fmt.Sprintf("Using CLI %s", CliVersion)),
+		textStyleGrayBold(fmt.Sprintf("Using CLI %s", cliVersion)),
 	)
+	if developmentMode {
+		s += textStyleGrayBold(fmt.Sprintf("Build time: %s\nCommit: %s\n", cliBuildTime, cliCommitHash))
+	}
 	fmt.Println(s)
 	fmt.Println(textStyle("Disconnecting from the Buchhalter Platform ..."))
 

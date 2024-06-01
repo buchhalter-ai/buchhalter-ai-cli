@@ -48,8 +48,11 @@ func RunConnectCommand(cmd *cobra.Command, cmdArgs []string) {
 		textStyle("Automatically sync all your incoming invoices from your suppliers. "),
 		textStyle("More information at: "),
 		textStyleBold("https://buchhalter.ai"),
-		textStyleGrayBold(fmt.Sprintf("Using CLI %s", CliVersion)),
+		textStyleGrayBold(fmt.Sprintf("Using CLI v%s", cliVersion)),
 	)
+	if developmentMode {
+		s += textStyleGrayBold(fmt.Sprintf("Build time: %s\nCommit: %s\n", cliBuildTime, cliCommitHash))
+	}
 	fmt.Println(s)
 	fmt.Println(textStyle("Connecting to the Buchhalter Platform ..."))
 
@@ -73,7 +76,7 @@ func RunConnectCommand(cmd *cobra.Command, cmdArgs []string) {
 	// Making API call
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 	apiHost := viper.GetString("buchhalter_api_host")
-	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiToken, CliVersion)
+	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiToken, cliVersion)
 	if err != nil {
 		logger.Error("Error initializing Buchhalter API client", "error", err)
 		exitMessage := fmt.Sprintf("Error initializing Buchhalter API client: %s", err)

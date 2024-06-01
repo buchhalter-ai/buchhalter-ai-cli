@@ -101,7 +101,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 
 	apiHost := viper.GetString("buchhalter_api_host")
 	apiToken := viper.GetString("buchhalter_api_token")
-	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiToken, CliVersion)
+	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiToken, cliVersion)
 	if err != nil {
 		logger.Error("Error initializing Buchhalter API client", "error", err)
 		exitMessage := fmt.Sprintf("Error initializing Buchhalter API client: %s", err)
@@ -337,7 +337,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")
 	if !developmentMode && alwaysSendMetrics {
 		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)
-		err = buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
+		err = buchhalterAPIClient.SendMetrics(RunData, cliVersion, ChromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
 		if err != nil {
 			// TODO Implement better error handling
 			logger.Error("Error sending usage metrics to Buchhalter API", "error", err)
@@ -404,7 +404,7 @@ func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.P
 func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, vaultVersion, oicdbVersion string) {
 	// TODO Add logging for sendMetrics
 
-	err := buchhalterAPIClient.SendMetrics(RunData, CliVersion, ChromeVersion, vaultVersion, oicdbVersion)
+	err := buchhalterAPIClient.SendMetrics(RunData, cliVersion, ChromeVersion, vaultVersion, oicdbVersion)
 	if err != nil {
 		// TODO Implement better error handling
 		fmt.Println(err)
@@ -675,7 +675,7 @@ func (m viewModel) View() string {
 		textStyle("Automatically sync all your incoming invoices from your suppliers. "),
 		textStyle("More information at: "),
 		textStyleBold("https://buchhalter.ai"),
-		textStyleGrayBold(fmt.Sprintf("Using OICDB %s and CLI %s", m.recipeParser.OicdbVersion, CliVersion)),
+		textStyleGrayBold(fmt.Sprintf("Using OICDB %s and CLI %s", m.recipeParser.OicdbVersion, cliVersion)),
 	) + "\n"
 
 	if !m.hasError {
