@@ -48,7 +48,13 @@ type BrowserDriver struct {
 	browserCtx         context.Context
 	recipeTimeout      time.Duration
 	maxFilesDownloaded int
-	newFilesCount      int
+
+	// downloadedFilesCount is used to count the number of files that have been downloaded in the `downloadAll` step
+	downloadedFilesCount int
+
+	// newFilesCount is used to count the number of new files that have been moved to the local storage
+	// Incl. a check if we had this document already
+	newFilesCount int
 }
 
 func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterDocumentsDirectory string, documentArchive *archive.DocumentArchive, maxFilesDownloaded int) *BrowserDriver {
@@ -233,7 +239,14 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 				// TODO Implement error handling
 				fmt.Println(err)
 			}
-			return result
+
+			// Imagine we run the `downloadALl` step, we download 2 files and then the recipe times out.
+			// It is bad that the recipe timed out, however, we still want to process with the 2 new downloaded documents.
+			// Process in this context means to move the files to the documents directory and add them to the document archive.
+			// Thats why we don't abort if the recipe timed out in this stage.
+			if !(step.Action == "downloadAll" && b.downloadedFilesCount > 0) {
+				return result
+			}
 		}
 		cs = (float64(baseCountStep) + float64(n)) / float64(totalStepCount)
 		p.Send(utils.ViewMsgProgressUpdate{Percent: cs})
@@ -357,6 +370,8 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 		return utils.StepResult{Status: "error", Message: err.Error()}
 	}
 
+	b.downloadedFilesCount = 0
+
 	// Limit nodes to 2 to prevent too many downloads at once/rate limiting
 	concurrentDownloadsPool := make(chan struct{}, 2)
 	wg := &sync.WaitGroup{}
@@ -368,6 +383,7 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 			switch ev.State {
 			case browser.DownloadProgressStateCompleted:
 				b.logger.Debug("Executing recipe step ... download completed", "action", step.Action, "guid", ev.GUID, "received_bytes", ev.ReceivedBytes)
+				b.downloadedFilesCount++
 				<-concurrentDownloadsPool
 				wg.Done()
 			case browser.DownloadProgressStateCanceled:
