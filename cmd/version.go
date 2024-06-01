@@ -17,9 +17,9 @@ var versionCmd = &cobra.Command{
 	Long:  `See what version of buchhalter command line tool you're using.'`,
 	Run: func(cmd *cobra.Command, args []string) {
 		developmentMode := viper.GetBool("dev")
-		versionString := fmt.Sprintf("buchhalter v%s", cliVersion)
+		versionString := fmt.Sprintf("buchhalter %s", cliVersion)
 		if developmentMode {
-			versionString = fmt.Sprintf("buchhalter v%s\nBuild time: %s\nCommit: %s", cliVersion, cliBuildTime, cliCommitHash)
+			versionString = fmt.Sprintf("buchhalter %s\nBuild time: %s\nCommit: %s", cliVersion, cliBuildTime, cliCommitHash)
 		}
 
 		fmt.Println(versionString)
