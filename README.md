@@ -131,3 +131,16 @@ We're looking forward to your contributions!
 3. buchhalter-cli will never store credentials or data on your local machine.
 4. buchhalter-cli loads recipes from the open invoice collector database by default.
 5. buchhalter-cli will never send any data to the buchhalter-ai API without your consent.
+
+## Development
+
+### Creating a new release
+
+Imagine we want to release v1.2.3
+
+```sh
+$ git tag -a v1.2.3
+$ git push origin v1.2.3
+```
+
+This triggers the automatic workflow to compile + create a new release + update the homebrew recipe.
