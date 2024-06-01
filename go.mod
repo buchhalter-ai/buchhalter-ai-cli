@@ -6,7 +6,7 @@ require (
 	github.com/Davincible/chromedp-undetected v1.3.8
 	github.com/charmbracelet/bubbles v0.18.0
 	github.com/charmbracelet/bubbletea v0.26.4
-	github.com/charmbracelet/lipgloss v0.10.0
+	github.com/charmbracelet/lipgloss v0.11.0
 	github.com/chromedp/cdproto v0.0.0-20240304214822-eeb3d13057c9
 	github.com/chromedp/chromedp v0.9.5
 	github.com/spf13/cobra v1.8.0
