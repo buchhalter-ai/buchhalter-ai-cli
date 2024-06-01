@@ -59,6 +59,7 @@ brews:
   - repository:
       owner: buchhalter-ai
       name: homebrew-buchhalter
+      branch: main
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
 
     directory: Formula
