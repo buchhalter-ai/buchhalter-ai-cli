@@ -52,24 +52,20 @@ changelog:
       - "^docs:"
       - "^test:"
 
+# TODO Add a proper release message, see https://github.com/goreleaser/goreleaser/blob/main/.goreleaser.yaml#L383C1-L402C14
+
 # Homebrew (macOS)
 brews:
-  repository:
-    owner: buchhalter-ai
-    name: homebrew-buchhalter
+  - repository:
+      owner: buchhalter-ai
+      name: homebrew-buchhalter
 
-  directory: Formula
+    directory: Formula
 
-  homepage: "https://buchhalter.ai/"
-  description: "Automatically sync all your incoming invoices from your suppliers."
+    homepage: "https://buchhalter.ai/"
+    description: "Automatically sync all your incoming invoices from your suppliers."
 
-  license: "SSPL-1.0"
+    license: "SSPL-1.0"
 
-  test: |
-    system "#{bin}/buchhalter version"
-
-  # Optionally a token can be provided, if it differs from the token
-  # provided to GoReleaser
-  token: "{{ .Env.GITHUB_PERSONAL_AUTH_TOKEN }}"
-
-# TODO Add a proper release message, see https://github.com/goreleaser/goreleaser/blob/main/.goreleaser.yaml#L383C1-L402C14
+    test: |
+      system "#{bin}/buchhalter version"
