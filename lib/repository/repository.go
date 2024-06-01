@@ -99,7 +99,7 @@ func NewBuchhalterAPIClient(logger *slog.Logger, apiHost, configDirectory, apiTo
 		logger:          logger,
 		configDirectory: configDirectory,
 		apiHost:         u,
-		userAgent:       fmt.Sprintf("buchhalter-cli/%s", cliVersion),
+		userAgent:       fmt.Sprintf("buchhalter-cli/v%s", cliVersion),
 		apiToken:        apiToken,
 	}
 
