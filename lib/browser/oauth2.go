@@ -1,4 +1,6 @@
-package client
+package browser
+
+// Client to control a headless browser acting as a OAuth2 client.
 
 import (
 	"bytes"
@@ -23,14 +25,9 @@ import (
 
 	cu "github.com/Davincible/chromedp-undetected"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-)
-
-var (
-	textStyleBold = lipgloss.NewStyle().Bold(true).Render
 )
 
 type HiddenInputFields struct {
