@@ -56,6 +56,12 @@ type BrowserDriver struct {
 }
 
 func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterDocumentsDirectory string, documentArchive *archive.DocumentArchive, maxFilesDownloaded int) *BrowserDriver {
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("disable-search-engine-choice-screen", true),
+	)
+	allocCtx, _ := chromedp.NewExecAllocator(context.Background(), opts...)
+	browserCtx, _ := chromedp.NewContext(allocCtx)
+
 	return &BrowserDriver{
 		logger:          logger,
 		credentials:     credentials,
@@ -63,7 +69,7 @@ func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchh
 
 		buchhalterDocumentsDirectory: buchhalterDocumentsDirectory,
 
-		browserCtx:         context.Background(),
+		browserCtx:         browserCtx,
 		recipeTimeout:      60 * time.Second,
 		maxFilesDownloaded: maxFilesDownloaded,
 		newFilesCount:      0,
@@ -75,15 +81,11 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 	b.logger.Info("Starting chrome browser driver ...", "recipe", recipe.Supplier, "recipe_version", recipe.Version)
 	ctx, cancel, err := cu.New(cu.NewConfig(
 		cu.WithContext(b.browserCtx),
+		cu.WithTimeout(600*time.Second),
 	))
 	if err != nil {
-		// TODO Implement error handling
 		panic(err)
 	}
-	defer cancel()
-
-	// create a timeout as a safety net to prevent any infinite wait loops
-	ctx, cancel = context.WithTimeout(ctx, 600*time.Second)
 	defer cancel()
 
 	// get chrome version for metrics
