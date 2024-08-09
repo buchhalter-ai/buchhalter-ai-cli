@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"buchhalter/lib/vault"
 
@@ -19,6 +20,7 @@ import (
 
 type RecipeParser struct {
 	logger *slog.Logger
+	mutex  sync.Mutex
 
 	configDirectory  string
 	storageDirectory string
@@ -104,7 +106,9 @@ func (p *RecipeParser) LoadRecipes(developmentMode bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	p.mutex.Lock()
 	p.OicdbVersion = p.database.Version
+	p.mutex.Unlock()
 	p.logger.Info("Loaded official recipes for suppliers", "num_recipes", len(p.database.Recipes), "oicdb_version", p.OicdbVersion)
 
 	// Create local recipes directory if not exists
