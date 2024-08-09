@@ -73,17 +73,24 @@ func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchh
 func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) utils.RecipeResult {
 	// Init browser
 	b.logger.Info("Starting chrome browser driver ...", "recipe", recipe.Supplier, "recipe_version", recipe.Version)
+
+	// Setting chrome flags
+	// Docs: https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("disable-search-engine-choice-screen", true),
+		chromedp.Flag("headless", false),
+	)
+
 	ctx, cancel, err := cu.New(cu.NewConfig(
 		cu.WithContext(b.browserCtx),
+		cu.WithChromeFlags(opts...),
+		// create a timeout as a safety net to prevent any infinite wait loops
+		cu.WithTimeout(600*time.Second),
 	))
 	if err != nil {
 		// TODO Implement error handling
 		panic(err)
 	}
-	defer cancel()
-
-	// create a timeout as a safety net to prevent any infinite wait loops
-	ctx, cancel = context.WithTimeout(ctx, 600*time.Second)
 	defer cancel()
 
 	// get chrome version for metrics
