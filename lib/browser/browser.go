@@ -78,6 +78,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 	// Docs: https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("disable-search-engine-choice-screen", true),
+		chromedp.Flag("enable-automation", false),
 		chromedp.Flag("headless", false),
 	)
 
