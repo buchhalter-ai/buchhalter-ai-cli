@@ -1,6 +1,6 @@
 module buchhalter
 
-go 1.22
+go 1.23
 
 require (
 	github.com/Davincible/chromedp-undetected v1.3.8
