@@ -1,6 +1,3 @@
-/*
-Copyright © 2023 buchhalter.ai <support@buchhalter.ai>
-*/
 package cmd
 
 import (
