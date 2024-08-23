@@ -12,7 +12,8 @@ metadata:
   mod_timestamp: "{{ .CommitTimestamp }}"
 
 builds:
-  - env:
+  - binary: buchhalter
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -42,6 +43,10 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end -}}
+    files:
+      - buchhalter
+      - LICENSE
+      - README.md
     format_overrides:
       - goos: windows
         format: zip
