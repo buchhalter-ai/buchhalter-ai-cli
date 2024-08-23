@@ -71,6 +71,6 @@ brews:
 
     license: "SSPL-1.0"
     install: |
-      bin.install "bin/buchhalter"
+      bin.install "buchhalter"
     test: |
       system "#{bin}/buchhalter version"
