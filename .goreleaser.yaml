@@ -68,6 +68,7 @@ brews:
     description: "Automatically sync all your incoming invoices from your suppliers."
 
     license: "SSPL-1.0"
-
+    install: |
+      bin.install "buchhalter"
     test: |
       system "#{bin}/buchhalter version"
