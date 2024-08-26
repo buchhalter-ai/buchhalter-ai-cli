@@ -78,8 +78,20 @@ func NewClientAuthBrowserDriver(logger *slog.Logger, credentials *vault.Credenti
 
 func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) utils.RecipeResult {
 	b.logger.Info("Starting client auth chrome browser driver ...", "recipe", recipe.Supplier, "recipe_version", recipe.Version)
+
+	// Setting chrome flags
+	// Docs: https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("disable-search-engine-choice-screen", true),
+		chromedp.Flag("enable-automation", false),
+		chromedp.Flag("headless", false),
+	)
+
 	ctx, cancel, err := cu.New(cu.NewConfig(
 		cu.WithContext(b.browserCtx),
+		cu.WithChromeFlags(opts...),
+		// create a timeout as a safety net to prevent any infinite wait loops
+		cu.WithTimeout(600*time.Second),
 	))
 	if err != nil {
 		// TODO Implement error handling
