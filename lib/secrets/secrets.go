@@ -30,12 +30,12 @@ type secretFileEntry struct {
 }
 
 type secretFileEntryTokens struct {
-	AccessTokenEncrypted  string `json:"accessTokenEncrypted"`
-	RefreshTokenEncrypted string `json:"refreshTokenEncrypted"`
-	TokenType             string `json:"tokenType"`
-	State                 string `json:"state"`
-	ExpiresIn             int    `json:"expiresIn"`
-	CreatedAt             int    `json:"createdAt"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+	TokenType    string `json:"tokenType"`
+	State        string `json:"state"`
+	ExpiresIn    int    `json:"expiresIn"`
+	CreatedAt    int    `json:"createdAt"`
 }
 
 func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens, buchhalterConfigDirectory string) error {
@@ -46,12 +46,12 @@ func SaveOauth2TokensToFile(id string, tokens Oauth2Tokens, buchhalterConfigDire
 
 	ca := int(time.Now().Unix())
 	t := secretFileEntryTokens{
-		AccessTokenEncrypted:  tokens.AccessToken,
-		RefreshTokenEncrypted: tokens.RefreshToken,
-		TokenType:             tokens.TokenType,
-		State:                 tokens.State,
-		ExpiresIn:             tokens.ExpiresIn,
-		CreatedAt:             ca,
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+		TokenType:    tokens.TokenType,
+		State:        tokens.State,
+		ExpiresIn:    tokens.ExpiresIn,
+		CreatedAt:    ca,
 	}
 
 	// Update secret
@@ -86,8 +86,8 @@ func GetOauthAccessTokenFromCache(id, buchhalterConfigDirectory string) (Oauth2T
 	for _, e := range sfe.Secrets {
 		if e.Id == id {
 			tokens = Oauth2Tokens{
-				AccessToken:  e.Tokens.AccessTokenEncrypted,
-				RefreshToken: e.Tokens.RefreshTokenEncrypted,
+				AccessToken:  e.Tokens.AccessToken,
+				RefreshToken: e.Tokens.RefreshToken,
 				ExpiresIn:    e.Tokens.ExpiresIn,
 				State:        e.Tokens.State,
 				TokenType:    e.Tokens.TokenType,
