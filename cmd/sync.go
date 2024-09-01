@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -146,9 +145,12 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 
 	err := documentArchive.BuildArchiveIndex()
 	if err != nil {
-		// TODO Implement better error handling
 		logger.Error("Error building document archive index", "error", err)
-		fmt.Println(err)
+		p.Send(viewMsgStatusUpdate{
+			title:      "Building document archive index",
+			hasError:   true,
+			shouldQuit: false,
+		})
 	}
 
 	// Check for OICDB schema updates
@@ -160,9 +162,12 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 
 	err = buchhalterAPIClient.UpdateOpenInvoiceCollectorDBSchemaIfAvailable(localOICDBSchemaChecksum)
 	if err != nil {
-		// TODO Implement better error handling
 		logger.Error("Error checking for OICDB schema updates", "error", err)
-		fmt.Println(err)
+		p.Send(viewMsgStatusUpdate{
+			title:      "Checking for OICDB schema updates",
+			hasError:   true,
+			shouldQuit: false,
+		})
 	}
 
 	developmentMode := viper.GetBool("dev")
@@ -176,19 +181,25 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 
 		err = buchhalterAPIClient.UpdateOpenInvoiceCollectorDBIfAvailable(localOICDBChecksum)
 		if err != nil {
-			// TODO Implement better error handling
 			logger.Error("Error checking for OICDB repository updates", "error", err)
-			fmt.Println(err)
+			p.Send(viewMsgStatusUpdate{
+				title:      "Checking for OICDB repository updates",
+				hasError:   true,
+				shouldQuit: false,
+			})
 		}
 	}
 
-	recipesToExecute := prepareRecipes(logger, supplier, vaultProvider, recipeParser)
+	recipesToExecute, err := prepareRecipes(logger, supplier, vaultProvider, recipeParser)
 	// No credentials found for supplier/recipes
-	if len(recipesToExecute) == 0 {
-		// TODO Implement better error handling
-		logger.Error("No recipes found for suppliers", "supplier", supplier)
-		fmt.Println("No recipes found for suppliers")
-		os.Exit(1)
+	if len(recipesToExecute) == 0 || err != nil {
+		logger.Error("No recipes found for suppliers", "supplier", supplier, "error", err)
+		p.Send(viewMsgStatusUpdate{
+			title:      "No recipes found for suppliers",
+			hasError:   true,
+			shouldQuit: true,
+		})
+		return
 	}
 
 	var t string
@@ -287,9 +298,12 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 	logger.Info("Checking if we have a premium subscription to Buchhalter API ...")
 	user, err := buchhalterAPIClient.GetAuthenticatedUser()
 	if err != nil {
-		// TODO Implement better error handling
 		logger.Error("Error retrieving authenticated user", "error", err)
-		fmt.Println(err)
+		p.Send(viewMsgStatusUpdate{
+			title:      "Retrieving authenticated user",
+			hasError:   true,
+			shouldQuit: false,
+		})
 	}
 	if user != nil && len(user.User.ID) > 0 {
 		uiDocumentUploadMessage := "Uploading documents to Buchhalter API ..."
@@ -338,9 +352,12 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)
 		err = buchhalterAPIClient.SendMetrics(RunData, cliVersion, ChromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
 		if err != nil {
-			// TODO Implement better error handling
 			logger.Error("Error sending usage metrics to Buchhalter API", "error", err)
-			fmt.Println(err)
+			p.Send(viewMsgStatusUpdate{
+				title:      "Sending usage metrics to Buchhalter API",
+				hasError:   true,
+				shouldQuit: false,
+			})
 		}
 
 		p.Send(viewMsgQuit{})
@@ -357,18 +374,18 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 	}
 }
 
-func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) []recipeToExecute {
+func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) ([]recipeToExecute, error) {
+	var r []recipeToExecute
+
 	developmentMode := viper.GetBool("dev")
 	logger.Info("Loading recipes for suppliers ...", "development_mode", developmentMode)
 	loadRecipeResult, err := recipeParser.LoadRecipes(developmentMode)
 	if err != nil {
-		// TODO Implement better error handling
 		logger.Error("Error loading recipes for suppliers", "error", err, "load_recipe_result", loadRecipeResult)
-		fmt.Println(err)
+		return r, err
 	}
 
 	// Run single supplier recipe
-	var r []recipeToExecute
 	stepCount := 0
 	vaultItems := vaultProvider.VaultItems
 	if supplier != "" {
@@ -397,7 +414,7 @@ func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.P
 		}
 	}
 
-	return r
+	return r, nil
 }
 
 func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, vaultVersion, oicdbVersion string) {
@@ -498,8 +515,9 @@ type viewMsgModeUpdate struct {
 //
 // Examples: Building index, Executing recipe, etc.
 type viewMsgStatusUpdate struct {
-	title    string
-	hasError bool
+	title      string
+	hasError   bool
+	shouldQuit bool
 }
 
 // viewMsgProgressUpdate updates the progress bar in the bubbletea application.
@@ -620,6 +638,10 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentAction = msg.title
 		if msg.hasError {
 			m.hasError = true
+		}
+
+		if msg.shouldQuit {
+			return m, tea.Quit
 		}
 		return m, nil
 
