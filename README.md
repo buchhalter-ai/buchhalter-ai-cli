@@ -48,7 +48,7 @@ Login to your 1Password vault in the console with: `eval $(op signin)`
 Sync all the latest invoices from all tagged suppliers in 1Password to your local disk:
 
 ```sh
-go run main.go sync
+buchhalter sync
 ```
 
 #### From one supplier
@@ -56,7 +56,7 @@ go run main.go sync
 Example: Load the latest invoices from Hetzner Cloud only (using the default recipe from [oicdb.org](https://oicdb.org/)):
 
 ```sh
-go run main.go sync hetzner
+buchhalter sync hetzner
 ```
 
 ## Configuration
@@ -123,7 +123,7 @@ You can use the `--dev` flag to overwrite recipes for a specific supplier with y
 Example: Load all invoices from Hetzner Cloud (using your local recipe stored in `buchhalter/_local/recipes/hetzner.json`):
 
 ```sh
-go run main.go sync hetzner --dev
+buchhalter sync hetzner --dev
 ```
 
 That's it! You can now use buchhalter-cli to download all your invoices from your suppliers automatically.
