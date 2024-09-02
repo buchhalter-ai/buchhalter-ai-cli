@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/charmbracelet/lipgloss"
@@ -25,6 +28,22 @@ const (
 |_.__/ \__._|\___|_| |_|_| |_|\__._|_|\__\___|_|
 `
 )
+
+type Vault struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type VaultSelectionModel struct {
+	vaults    []Vault
+	cursor    int
+	choice    int
+	resetView bool
+}
+
+func (m VaultSelectionModel) Init() tea.Cmd {
+	return nil
+}
 
 var (
 	// cliVersion is the version of the software.
@@ -97,11 +116,100 @@ func init() {
 	}
 }
 
+func (m VaultSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down":
+			if m.cursor < len(m.vaults)-1 {
+				m.cursor++
+			}
+		case "enter":
+			m.choice = m.cursor
+			m.resetView = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m VaultSelectionModel) View() string {
+	if m.resetView {
+		return "\033[H\033[2J"
+	}
+
+	s := "Select the 1password vault that should be used with buchhalter:\n\n"
+	for i, vault := range m.vaults {
+		cursor := " "
+		if m.cursor == i {
+			cursor = ">"
+		}
+		s += fmt.Sprintf("%s %s\n", cursor, vault.Name)
+	}
+	return s
+}
+
+func getVaults() ([]Vault, error) {
+	cmd := exec.Command("op", "vault", "list", "--format", "json")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var vaults []Vault
+	err = json.Unmarshal(output, &vaults)
+	if err != nil {
+		return nil, err
+	}
+
+	return vaults, nil
+}
+
+func selectVault(vaults []Vault) (Vault, error) {
+	model := VaultSelectionModel{vaults: vaults}
+	p := tea.NewProgram(model)
+	if err := p.Start(); err != nil {
+		return Vault{}, err
+	}
+	return model.vaults[model.choice], nil
+}
+
 func initConfig() {
 	homeDir, _ := os.UserHomeDir()
 	buchhalterConfigDir := filepath.Join(homeDir, ".buchhalter")
 	configFile := filepath.Join(buchhalterConfigDir, ".buchhalter.yaml")
 	buchhalterDir := filepath.Join(homeDir, "buchhalter")
+
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		err := utils.CreateDirectoryIfNotExists(buchhalterConfigDir)
+		if err != nil {
+			fmt.Println("Error creating config directory:", err)
+			os.Exit(1)
+		}
+
+		vaults, err := getVaults()
+		if err != nil {
+			fmt.Println("Error listing vaults:", err)
+			os.Exit(1)
+		}
+
+		selectedVault, err := selectVault(vaults)
+		if err != nil {
+			fmt.Println("Error selecting vault:", err)
+			os.Exit(1)
+		}
+
+		viper.Set("credential_provider_vault", selectedVault.Name)
+		err = viper.WriteConfigAs(configFile)
+		if err != nil {
+			fmt.Println("Error creating config file:", err)
+			os.Exit(1)
+		}
+	}
 
 	// Set default values for viper config
 	// Documented settings
