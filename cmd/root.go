@@ -116,7 +116,7 @@ func init() {
 	}
 }
 
-func (m VaultSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *VaultSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -142,13 +142,14 @@ func (m VaultSelectionModel) View() string {
 		return "\033[H\033[2J"
 	}
 
-	s := "Select the 1password vault that should be used with buchhalter:\n\n"
+	s := "Select the 1password vault that should be used with buchhalter cli:\n\n"
 	for i, vault := range m.vaults {
-		cursor := " "
 		if m.cursor == i {
-			cursor = ">"
+			s += "(•) "
+		} else {
+			s += "( ) "
 		}
-		s += fmt.Sprintf("%s %s\n", cursor, vault.Name)
+		s += vault.Name + "\n"
 	}
 	return s
 }
@@ -171,8 +172,8 @@ func getVaults() ([]Vault, error) {
 
 func selectVault(vaults []Vault) (Vault, error) {
 	model := VaultSelectionModel{vaults: vaults}
-	p := tea.NewProgram(model)
-	if err := p.Start(); err != nil {
+	p := tea.NewProgram(&model)
+	if _, err := p.Run(); err != nil {
 		return Vault{}, err
 	}
 	return model.vaults[model.choice], nil
@@ -193,7 +194,7 @@ func initConfig() {
 
 		vaults, err := getVaults()
 		if err != nil {
-			fmt.Println("Error listing vaults:", err)
+			fmt.Println("Error listing vaults. Make sure 1password cli is installed and you are logged in with eval $(op signin)", err)
 			os.Exit(1)
 		}
 
@@ -214,7 +215,6 @@ func initConfig() {
 	// Set default values for viper config
 	// Documented settings
 	viper.SetDefault("credential_provider_cli_command", "")
-	viper.SetDefault("credential_provider_vault", "Base")
 	viper.SetDefault("credential_provider_item_tag", "buchhalter-ai")
 	viper.SetDefault("buchhalter_directory", buchhalterDir)
 	viper.SetDefault("buchhalter_config_directory", buchhalterConfigDir)
