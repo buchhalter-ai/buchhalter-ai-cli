@@ -3,13 +3,13 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -154,6 +154,7 @@ func (m VaultSelectionModel) View() string {
 	return s
 }
 
+// TODO Refactor and move to vault.1password.go
 func getVaults() ([]Vault, error) {
 	cmd := exec.Command("op", "vault", "list", "--format", "json")
 	output, err := cmd.Output()
@@ -185,6 +186,7 @@ func initConfig() {
 	configFile := filepath.Join(buchhalterConfigDir, ".buchhalter.yaml")
 	buchhalterDir := filepath.Join(homeDir, "buchhalter")
 
+	// TODO We check the existing part of the configuration file here and below -> refctor to only once
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
 		err := utils.CreateDirectoryIfNotExists(buchhalterConfigDir)
 		if err != nil {
