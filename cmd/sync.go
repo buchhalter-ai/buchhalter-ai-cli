@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -249,30 +250,46 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 		logger.Info("Downloading invoices ...", "supplier", recipesToExecute[i].recipe.Supplier, "supplier_type", recipesToExecute[i].recipe.Type)
 		switch recipesToExecute[i].recipe.Type {
 		case "browser":
-			browserDriver := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDocumentsDirectory, documentArchive, buchhalterMaxDownloadFilesPerReceipt)
+			browserDriver, err := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDocumentsDirectory, documentArchive, buchhalterMaxDownloadFilesPerReceipt)
+			if err != nil {
+				// TODO Implement better error handling
+				fmt.Println(err)
+			}
+
+			// Send the browser context to the view layer
+			// This is needed in case of an external abort signal (e.g. CTRL+C).
+			p.Send(updateBrowserContext{ctx: browserDriver.GetContext()})
+
 			recipeResult = browserDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = browserDriver.ChromeVersion
 			}
-			// TODO Should we quit it here or inside RunRecipe?
-			err = browserDriver.Quit()
+
+			// We don't need to call `chromedp.Cancel()` here.
+			// The browserDriver will be closed gracefully when the recipe is finished.
+			// In case of an external abort signal (e.g. CTRL+C), bubbletea will call `chromedp.Cancel()`.
+
+		case "client":
+			clientDriver, err := browser.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDocumentsDirectory, documentArchive)
 			if err != nil {
 				// TODO Implement better error handling
 				fmt.Println(err)
 			}
-		case "client":
-			clientDriver := browser.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDocumentsDirectory, documentArchive)
+
+			// Send the browser context to the view layer
+			// This is needed in case of an external abort signal (e.g. CTRL+C).
+			p.Send(updateBrowserContext{ctx: clientDriver.GetContext()})
+
 			recipeResult = clientDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = clientDriver.ChromeVersion
 			}
-			// TODO Should we quit it here or inside RunRecipe?
-			err = clientDriver.Quit()
-			if err != nil {
-				// TODO Implement better error handling
-				fmt.Println(err)
-			}
+
+			// We don't need to call `chromedp.Cancel()` here.
+			// The browserDriver will be closed gracefully when the recipe is finished.
+			// In case of an external abort signal (e.g. CTRL+C), bubbletea will call `chromedp.Cancel()`.
 		}
+
 		rdx := repository.RunDataSupplier{
 			Supplier:         recipesToExecute[i].recipe.Supplier,
 			Version:          recipesToExecute[i].recipe.Version,
@@ -473,6 +490,14 @@ type viewModel struct {
 	buchhalterAPIClient *repository.BuchhalterAPIClient
 	recipeParser        *parser.RecipeParser
 	logger              *slog.Logger
+
+	// Browser
+	browserCtx context.Context
+}
+
+// updateBrowserContext is a message type to update the browser context in the bubbletea application.
+type updateBrowserContext struct {
+	ctx context.Context
 }
 
 // viewMsgQuit initiates the shutdown sequence for the bubbletea application.
@@ -550,6 +575,9 @@ func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password, b
 		buchhalterAPIClient: buchhalterAPIClient,
 		recipeParser:        recipeParser,
 		logger:              logger,
+
+		// Browser
+		browserCtx: nil,
 	}
 
 	return m
@@ -609,6 +637,11 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		return m, nil
+
+	case updateBrowserContext:
+		m.logger.Info("Updating browser context")
+		m.browserCtx = msg.ctx
 		return m, nil
 
 	case viewMsgQuit:
@@ -761,26 +794,14 @@ func quit(m viewModel) viewModel {
 		m.details = "HAVE A NICE DAY! :)"
 	}
 
-	// TODO Double check where we need to quit running browser sessions
-	// TODO Wait group for browser and client
-	/*
-		go func() {
-			err := browser.Quit()
-			if err != nil {
-				// TODO implement better error handling
-				fmt.Println(err)
-			}
-		}()
-	*/
-	/*
-		go func() {
-			err := client.Quit()
-			if err != nil {
-				// TODO implement better error handling
-				fmt.Println(err)
-			}
-		}()
-	*/
+	// Stopping the browser instance
+	m.logger.Info("Stopping browser instance")
+	if m.browserCtx != nil {
+		err := browser.Quit(m.browserCtx)
+		if err != nil {
+			m.logger.Error("Error cancelling browser", "error", err)
+		}
+	}
 
 	return m
 }
