@@ -44,6 +44,7 @@ type BrowserDriver struct {
 	documentsDirectory string
 
 	browserCtx         context.Context
+	browserCancel      context.CancelFunc
 	recipeTimeout      time.Duration
 	maxFilesDownloaded int
 
@@ -55,24 +56,20 @@ type BrowserDriver struct {
 	newFilesCount int
 }
 
-func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterDocumentsDirectory string, documentArchive *archive.DocumentArchive, maxFilesDownloaded int) *BrowserDriver {
-	return &BrowserDriver{
+func NewBrowserDriver(logger *slog.Logger, credentials *vault.Credentials, buchhalterDocumentsDirectory string, documentArchive *archive.DocumentArchive, maxFilesDownloaded int) (*BrowserDriver, error) {
+	driver := &BrowserDriver{
 		logger:          logger,
 		credentials:     credentials,
 		documentArchive: documentArchive,
 
 		buchhalterDocumentsDirectory: buchhalterDocumentsDirectory,
 
-		browserCtx:         context.Background(),
+		browserCtx:         nil,
+		browserCancel:      nil,
 		recipeTimeout:      60 * time.Second,
 		maxFilesDownloaded: maxFilesDownloaded,
 		newFilesCount:      0,
 	}
-}
-
-func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) utils.RecipeResult {
-	// Init browser
-	b.logger.Info("Starting chrome browser driver ...", "recipe", recipe.Supplier, "recipe_version", recipe.Version)
 
 	// Setting chrome flags
 	// Docs: https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md
@@ -82,17 +79,29 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 		chromedp.Flag("headless", false),
 	)
 
-	ctx, cancel, err := cu.New(cu.NewConfig(
-		cu.WithContext(b.browserCtx),
+	var err error
+	driver.browserCtx, driver.browserCancel, err = cu.New(cu.NewConfig(
+		cu.WithContext(context.Background()),
 		cu.WithChromeFlags(opts...),
 		// create a timeout as a safety net to prevent any infinite wait loops
 		cu.WithTimeout(600*time.Second),
 	))
 	if err != nil {
-		// TODO Implement error handling
-		panic(err)
+		return driver, err
 	}
-	defer cancel()
+
+	return driver, nil
+}
+
+func (b *BrowserDriver) GetContext() context.Context {
+	return b.browserCtx
+}
+
+func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) utils.RecipeResult {
+	b.logger.Info("Starting chrome browser driver ...", "recipe", recipe.Supplier, "recipe_version", recipe.Version)
+
+	ctx := b.browserCtx
+	defer b.browserCancel()
 
 	// get chrome version for metrics
 	if b.ChromeVersion == "" {
@@ -109,6 +118,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 	b.logger.Info("Starting chrome browser driver ... completed ", "recipe", recipe.Supplier, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
 
 	// create download directories
+	var err error
 	b.downloadsDirectory, b.documentsDirectory, err = utils.InitSupplierDirectories(b.buchhalterDocumentsDirectory, recipe.Supplier)
 	if err != nil {
 		// TODO Implement error handling
@@ -265,14 +275,6 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 		fmt.Println(err)
 	}
 	return result
-}
-
-func (b *BrowserDriver) Quit() error {
-	if b.browserCtx != nil {
-		return chromedp.Cancel(b.browserCtx)
-	}
-
-	return nil
 }
 
 func (b *BrowserDriver) stepOpen(ctx context.Context, step parser.Step) utils.StepResult {
