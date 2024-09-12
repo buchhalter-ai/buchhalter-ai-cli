@@ -7,15 +7,17 @@ import (
 
 type Items []Item
 
+type Vault struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type Item struct {
-	ID      string   `json:"id"`
-	Title   string   `json:"title"`
-	Tags    []string `json:"tags"`
-	Version int      `json:"version"`
-	Vault   struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	} `json:"vault"`
+	ID                    string    `json:"id"`
+	Title                 string    `json:"title"`
+	Tags                  []string  `json:"tags"`
+	Version               int       `json:"version"`
+	Vault                 Vault     `json:"vault"`
 	Category              string    `json:"category"`
 	LastEditedBy          string    `json:"last_edited_by"`
 	CreatedAt             time.Time `json:"created_at"`

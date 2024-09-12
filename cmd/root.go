@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -28,22 +25,6 @@ const (
 |_.__/ \__._|\___|_| |_|_| |_|\__._|_|\__\___|_|
 `
 )
-
-type Vault struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-type VaultSelectionModel struct {
-	vaults    []Vault
-	cursor    int
-	choice    int
-	resetView bool
-}
-
-func (m VaultSelectionModel) Init() tea.Cmd {
-	return nil
-}
 
 var (
 	// cliVersion is the version of the software.
@@ -74,6 +55,8 @@ var textStyle = lipgloss.NewStyle().Render
 var textStyleGrayBold = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#666666")).Render
 var textStyleBold = lipgloss.NewStyle().Bold(true).Render
 var headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#9FC131")).Render
+var checkMark = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
+var errorkMark = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).SetString("X")
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -116,103 +99,11 @@ func init() {
 	}
 }
 
-func (m *VaultSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "up":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case "down":
-			if m.cursor < len(m.vaults)-1 {
-				m.cursor++
-			}
-		case "enter":
-			m.choice = m.cursor
-			m.resetView = true
-			return m, tea.Quit
-		}
-	}
-	return m, nil
-}
-
-func (m VaultSelectionModel) View() string {
-	if m.resetView {
-		return "\033[H\033[2J"
-	}
-
-	s := "Select the 1password vault that should be used with buchhalter cli:\n\n"
-	for i, vault := range m.vaults {
-		if m.cursor == i {
-			s += "(•) "
-		} else {
-			s += "( ) "
-		}
-		s += vault.Name + "\n"
-	}
-	return s
-}
-
-// TODO Refactor and move to vault.1password.go
-func getVaults() ([]Vault, error) {
-	cmd := exec.Command("op", "vault", "list", "--format", "json")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	var vaults []Vault
-	err = json.Unmarshal(output, &vaults)
-	if err != nil {
-		return nil, err
-	}
-
-	return vaults, nil
-}
-
-func selectVault(vaults []Vault) (Vault, error) {
-	model := VaultSelectionModel{vaults: vaults}
-	p := tea.NewProgram(&model)
-	if _, err := p.Run(); err != nil {
-		return Vault{}, err
-	}
-	return model.vaults[model.choice], nil
-}
-
 func initConfig() {
 	homeDir, _ := os.UserHomeDir()
+	buchhalterDir := filepath.Join(homeDir, "buchhalter")
 	buchhalterConfigDir := filepath.Join(homeDir, ".buchhalter")
 	configFile := filepath.Join(buchhalterConfigDir, ".buchhalter.yaml")
-	buchhalterDir := filepath.Join(homeDir, "buchhalter")
-
-	// TODO We check the existing part of the configuration file here and below -> refctor to only once
-	if _, err := os.Stat(configFile); os.IsNotExist(err) {
-		err := utils.CreateDirectoryIfNotExists(buchhalterConfigDir)
-		if err != nil {
-			fmt.Println("Error creating config directory:", err)
-			os.Exit(1)
-		}
-
-		vaults, err := getVaults()
-		if err != nil {
-			fmt.Println("Error listing vaults. Make sure 1password cli is installed and you are logged in with eval $(op signin)", err)
-			os.Exit(1)
-		}
-
-		selectedVault, err := selectVault(vaults)
-		if err != nil {
-			fmt.Println("Error selecting vault:", err)
-			os.Exit(1)
-		}
-
-		viper.Set("credential_provider_vault", selectedVault.Name)
-		err = viper.WriteConfigAs(configFile)
-		if err != nil {
-			fmt.Println("Error creating config file:", err)
-			os.Exit(1)
-		}
-	}
 
 	// Set default values for viper config
 	// Documented settings
@@ -220,6 +111,7 @@ func initConfig() {
 	viper.SetDefault("credential_provider_item_tag", "buchhalter-ai")
 	viper.SetDefault("buchhalter_directory", buchhalterDir)
 	viper.SetDefault("buchhalter_config_directory", buchhalterConfigDir)
+	viper.SetDefault("buchhalter_config_file", configFile)
 	viper.SetDefault("buchhalter_max_download_files_per_receipt", 2)
 	viper.SetDefault("buchhalter_api_host", "https://app.buchhalter.ai/")
 	viper.SetDefault("buchhalter_always_send_metrics", false)
