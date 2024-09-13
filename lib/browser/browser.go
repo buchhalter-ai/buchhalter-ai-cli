@@ -36,12 +36,10 @@ type BrowserDriver struct {
 	documentArchive *archive.DocumentArchive
 
 	buchhalterDocumentsDirectory string
+	downloadsDirectory           string
+	documentsDirectory           string
 
 	ChromeVersion string
-
-	// TODO Check if those are needed
-	downloadsDirectory string
-	documentsDirectory string
 
 	browserCtx         context.Context
 	browserCancel      context.CancelFunc
@@ -97,7 +95,7 @@ func (b *BrowserDriver) GetContext() context.Context {
 	return b.browserCtx
 }
 
-func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) utils.RecipeResult {
+func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) (utils.RecipeResult, error) {
 	b.logger.Info("Starting chrome browser driver ...", "recipe", recipe.Supplier, "recipe_version", recipe.Version)
 
 	ctx := b.browserCtx
@@ -111,19 +109,25 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 			chromedp.Text(`#version`, &b.ChromeVersion, chromedp.NodeVisible),
 		})
 		if err != nil {
-			// TODO Implement error handling
-			panic(err)
+			b.logger.Error("Error while determining the Chrome version", "error", err.Error())
+			p.Send(utils.ViewStatusUpdateMsg{
+				Err:       fmt.Errorf("error while determining the Chrome version: %w", err),
+				Completed: true,
+			})
+			// We fall through here, because we can still continue without the Chrome version
 		}
 		b.ChromeVersion = strings.TrimSpace(b.ChromeVersion)
 	}
 	b.logger.Info("Starting chrome browser driver ... completed ", "recipe", recipe.Supplier, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
 
+	var result utils.RecipeResult
+
 	// Create download directories
 	var err error
 	b.downloadsDirectory, b.documentsDirectory, err = utils.InitSupplierDirectories(b.buchhalterDocumentsDirectory, recipe.Supplier)
 	if err != nil {
-		// TODO Implement error handling
-		fmt.Println(err)
+		b.logger.Error("Error while creating download directory", "error", err.Error(), "documents_directory", b.buchhalterDocumentsDirectory, "supplier", recipe.Supplier)
+		return result, fmt.Errorf("error while creating download directory: %w", err)
 	}
 	b.logger.Info("Download directories created", "downloads_directory", b.downloadsDirectory, "documents_directory", b.documentsDirectory)
 
@@ -139,8 +143,8 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 		}),
 	})
 	if err != nil {
-		// TODO Implement error handling
-		panic(err)
+		b.logger.Error("Error while configuring the download behavior of chrome", "error", err.Error(), "downloads_directory", b.downloadsDirectory)
+		return result, fmt.Errorf("error while configuring the download behavior of chrome: %w", err)
 	}
 
 	// Disable downloading images for performance reasons
@@ -150,7 +154,6 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 
 	var cs float64
 	n := 1
-	var result utils.RecipeResult
 	for _, step := range recipe.Steps {
 		p.Send(utils.ViewStatusUpdateMsg{
 			Message: fmt.Sprintf("Downloading invoices from `%s` (%d/%d):", recipe.Supplier, n, stepCountInCurrentRecipe),
@@ -163,7 +166,6 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 		if step.When.URL != "" {
 			var currentURL string
 			if err := chromedp.Run(ctx, chromedp.Location(&currentURL)); err != nil {
-				// TODO implement better error handling
 				b.logger.Error("Failed to get current URL", "error", err.Error())
 
 				// Skipping step
@@ -236,10 +238,10 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 				}
 				err = utils.TruncateDirectory(b.downloadsDirectory)
 				if err != nil {
-					// TODO Implement error handling
-					fmt.Println(err)
+					b.logger.Error("Error while truncating the download directory", "error", err.Error(), "downloads_directory", b.downloadsDirectory)
+					return result, fmt.Errorf("error while truncating the download directory: %w", err)
 				}
-				return result
+				return result, nil
 			}
 
 		case <-time.After(b.recipeTimeout):
@@ -253,16 +255,16 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 			}
 			err = utils.TruncateDirectory(b.downloadsDirectory)
 			if err != nil {
-				// TODO Implement error handling
-				fmt.Println(err)
+				b.logger.Error("Error while truncating the download directory", "error", err.Error(), "downloads_directory", b.downloadsDirectory)
+				return result, fmt.Errorf("error while truncating the download directory: %w", err)
 			}
 
-			// Imagine we run the `downloadALl` step, we download 2 files and then the recipe times out.
+			// Imagine we run the `downloadAll` step, we download 2 files and then the recipe times out.
 			// It is bad that the recipe timed out, however, we still want to process with the 2 new downloaded documents.
 			// Process in this context means to move the files to the documents directory and add them to the document archive.
 			// Thats why we don't abort if the recipe timed out in this stage.
 			if !(step.Action == "downloadAll" && b.downloadedFilesCount > 0) {
-				return result
+				return result, nil
 			}
 		}
 		cs = (float64(baseCountStep) + float64(n)) / float64(totalStepCount)
@@ -272,10 +274,10 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 
 	err = utils.TruncateDirectory(b.downloadsDirectory)
 	if err != nil {
-		// TODO Implement error handling
-		fmt.Println(err)
+		b.logger.Error("Error while truncating the download directory", "error", err.Error(), "downloads_directory", b.downloadsDirectory)
+		return result, fmt.Errorf("error while truncating the download directory: %w", err)
 	}
-	return result
+	return result, nil
 }
 
 func (b *BrowserDriver) stepOpen(ctx context.Context, step parser.Step) utils.StepResult {

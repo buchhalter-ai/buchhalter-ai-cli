@@ -282,19 +282,28 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 		case "browser":
 			browserDriver, err := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDocumentsDirectory, documentArchive, buchhalterMaxDownloadFilesPerReceipt)
 			if err != nil {
+				logger.Error("Error initializing a new browser driver", "error", err, "supplier", recipesToExecute[i].recipe.Supplier)
 				p.Send(utils.ViewStatusUpdateMsg{
-					Err:       fmt.Errorf("error downloading invoices from %s: %w", recipesToExecute[i].recipe.Supplier, err),
+					Err:       fmt.Errorf("error initializing a new browser driver for supplier `%s`: %w", recipesToExecute[i].recipe.Supplier, err),
 					Completed: true,
 				})
-				// TODO Should we continue here or abort? !!!
+				// We skip this supplier and continue with the next one
+				continue
 			}
 
 			// Send the browser context to the view layer
 			// This is needed in case of an external abort signal (e.g. CTRL+C).
 			p.Send(updateBrowserContext{ctx: browserDriver.GetContext()})
 
-			// TODO Catch error here
-			recipeResult = browserDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
+			recipeResult, err = browserDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
+			if err != nil {
+				logger.Error("Error running browser recipe", "error", err, "supplier", recipesToExecute[i].recipe.Supplier)
+				p.Send(utils.ViewStatusUpdateMsg{
+					Err:       fmt.Errorf("error running browser recipe for supplier `%s`: %w", recipesToExecute[i].recipe.Supplier, err),
+					Completed: true,
+				})
+				// We fall through, because recipeResult might be set and contains additional information
+			}
 			if ChromeVersion == "" {
 				ChromeVersion = browserDriver.ChromeVersion
 			}
@@ -306,19 +315,28 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 		case "client":
 			clientDriver, err := browser.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDocumentsDirectory, documentArchive)
 			if err != nil {
+				logger.Error("Error initializing a new client auth browser driver", "error", err, "supplier", recipesToExecute[i].recipe.Supplier)
 				p.Send(utils.ViewStatusUpdateMsg{
-					Err:       fmt.Errorf("error downloading invoices from %s: %w", recipesToExecute[i].recipe.Supplier, err),
+					Err:       fmt.Errorf("error initializing a new client auth browser for supplier `%s`: %w", recipesToExecute[i].recipe.Supplier, err),
 					Completed: true,
 				})
-				// TODO Should we continue here or abort? !!!
+				// We skip this supplier and continue with the next one
+				continue
 			}
 
 			// Send the browser context to the view layer
 			// This is needed in case of an external abort signal (e.g. CTRL+C).
 			p.Send(updateBrowserContext{ctx: clientDriver.GetContext()})
 
-			// TODO Catch error here
-			recipeResult = clientDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
+			recipeResult, err = clientDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
+			if err != nil {
+				logger.Error("Error running browser recipe", "error", err, "supplier", recipesToExecute[i].recipe.Supplier)
+				p.Send(utils.ViewStatusUpdateMsg{
+					Err:       fmt.Errorf("error running browser recipe for supplier `%s`: %w", recipesToExecute[i].recipe.Supplier, err),
+					Completed: true,
+				})
+				// We fall through, because recipeResult might be set and contains additional information
+			}
 			if ChromeVersion == "" {
 				ChromeVersion = clientDriver.ChromeVersion
 			}
@@ -327,6 +345,8 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 			// The browserDriver will be closed gracefully when the recipe is finished.
 			// In case of an external abort signal (e.g. CTRL+C), bubbletea will call `chromedp.Cancel()`.
 		}
+
+		// TODO recipeResult can be empty! (not nil, but without values)
 
 		rdx := repository.RunDataSupplier{
 			Supplier:         recipesToExecute[i].recipe.Supplier,
@@ -338,7 +358,6 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 		}
 		RunData = append(RunData, rdx)
 
-		// TODO Check for recipeResult.LastErrorMessage
 		p.Send(viewMsgRecipeDownloadResultMsg{
 			duration:      time.Since(startTime),
 			newFilesCount: recipeResult.NewFilesCount,
@@ -391,7 +410,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 			logger.Info("Uploading document to Buchhalter API ...", "file", fileInfo.Path, "checksum", fileChecksum)
 			result, err := buchhalterAPIClient.DoesDocumentExist(fileChecksum)
 			if err != nil {
-				// TODO Implement better error handling
+				// Skip the file if we can't check the existence of the document in the API
 				logger.Error("Error checking if document exists already in Buchhalter API", "file", fileInfo.Path, "checksum", fileChecksum, "error", err)
 				continue
 			}
@@ -405,7 +424,10 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 
 			err = buchhalterAPIClient.UploadDocument(fileInfo.Path, fileInfo.Supplier)
 			if err != nil {
-				// TODO Implement better error handling
+				p.Send(utils.ViewStatusUpdateMsg{
+					Err:       fmt.Errorf("error uploading document `%s` from `%s` to Buchhalter API: %w", fileInfo.Path, fileInfo.Supplier, err),
+					Completed: true,
+				})
 				logger.Error("Error uploading document to Buchhalter API", "file", fileInfo.Path, "supplier", fileInfo.Supplier, "error", err)
 				continue
 			}

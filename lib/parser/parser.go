@@ -39,7 +39,6 @@ type Database struct {
 }
 
 type Recipe struct {
-	// TODO Rename Prodiver to Supplier
 	Supplier string   `json:"supplier"`
 	Domains  []string `json:"domains"`
 	Version  string   `json:"version"`
@@ -169,7 +168,6 @@ func validateRecipes(buchhalterConfigDirectory string) (bool, error) {
 		return true, nil
 	}
 
-	// TODO Create our own error type here (validation error)
 	errorMessageParts := []string{}
 	for _, errorDescription := range result.Errors() {
 		errorMessageParts = append(errorMessageParts, errorDescription.String())

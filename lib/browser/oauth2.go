@@ -103,7 +103,7 @@ func (b *ClientAuthBrowserDriver) GetContext() context.Context {
 	return b.browserCtx
 }
 
-func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) utils.RecipeResult {
+func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountInCurrentRecipe int, baseCountStep int, recipe *parser.Recipe) (utils.RecipeResult, error) {
 	b.logger.Info("Starting client auth chrome browser driver ...", "recipe", recipe.Supplier, "recipe_version", recipe.Version)
 
 	ctx := b.browserCtx
@@ -117,25 +117,30 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 			chromedp.Text(`#version`, &b.ChromeVersion, chromedp.NodeVisible),
 		})
 		if err != nil {
-			// TODO Implement error handling
-			panic(err)
+			b.logger.Error("Error while determining the Chrome version", "error", err.Error())
+			p.Send(utils.ViewStatusUpdateMsg{
+				Err:       fmt.Errorf("error while determining the Chrome version: %w", err),
+				Completed: true,
+			})
+			// We fall through here, because we can still continue without the Chrome version
 		}
 		b.ChromeVersion = strings.TrimSpace(b.ChromeVersion)
 	}
 	b.logger.Info("Starting client auth chrome browser driver ... completed ", "recipe", recipe.Supplier, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
 
+	var result utils.RecipeResult
+
 	// Create download directories
 	var err error
 	b.downloadsDirectory, b.documentsDirectory, err = utils.InitSupplierDirectories(b.buchhalterDocumentsDirectory, recipe.Supplier)
 	if err != nil {
-		// TODO Implement error handling
-		fmt.Println(err)
+		b.logger.Error("Error while creating download directory", "error", err.Error(), "documents_directory", b.buchhalterDocumentsDirectory, "supplier", recipe.Supplier)
+		return result, err
 	}
 	b.logger.Info("Download directories created", "downloads_directory", b.downloadsDirectory, "documents_directory", b.documentsDirectory)
 
 	var cs float64
 	n := 1
-	var result utils.RecipeResult
 	for _, step := range recipe.Steps {
 		p.Send(utils.ViewStatusUpdateMsg{
 			Message: fmt.Sprintf("Downloading invoices from %s (%d/%d):", recipe.Supplier, n, stepCountInCurrentRecipe),
@@ -186,7 +191,7 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 					NewFilesCount:       b.newFilesCount,
 				}
 				if lastStepResult.Break {
-					return result
+					return result, nil
 				}
 			}
 
@@ -199,7 +204,7 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 				LastStepDescription: step.Description,
 				NewFilesCount:       b.newFilesCount,
 			}
-			return result
+			return result, nil
 		}
 
 		cs = (float64(baseCountStep) + float64(n)) / float64(totalStepCount)
@@ -207,7 +212,7 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 		n++
 	}
 
-	return result
+	return result, nil
 }
 
 func (b *ClientAuthBrowserDriver) stepOauth2Setup(step parser.Step) utils.StepResult {
