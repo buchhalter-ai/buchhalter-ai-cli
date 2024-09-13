@@ -722,57 +722,57 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the bubbletea application view.
 // Renders the UI based on the data in the model.
 func (m viewModel) View() string {
-	var s string
-	s = fmt.Sprintf(
+	s := strings.Builder{}
+	s.WriteString(fmt.Sprintf(
 		"%s\n%s\n%s%s\n%s\n",
 		headerStyle(LogoText),
 		textStyle("Automatically sync all your incoming invoices from your suppliers. "),
 		textStyle("More information at: "),
 		textStyleBold("https://buchhalter.ai"),
 		textStyleGrayBold(fmt.Sprintf("Using OICDB %s and CLI %s", m.recipeParser.OicdbVersion, cliVersion)),
-	) + "\n"
+	) + "\n")
 
 	if !m.hasError {
-		s += m.spinner.View() + m.currentAction
-		s += helpStyle.Render("  " + m.details)
+		s.WriteString(m.spinner.View() + m.currentAction)
+		s.WriteString(helpStyle.Render("  " + m.details))
 	} else {
-		s += errorStyle.Render("ERROR: " + m.currentAction)
-		s += helpStyle.Render("  " + m.details)
+		s.WriteString(errorStyle.Render("ERROR: " + m.currentAction))
+		s.WriteString(helpStyle.Render("  " + m.details))
 	}
 
-	s += "\n"
+	s.WriteString("\n")
 
 	if m.showProgress {
-		s += m.progress.View() + "\n\n"
+		s.WriteString(m.progress.View() + "\n\n")
 	}
 
 	if !m.hasError && m.mode == "sync" {
 		for _, res := range m.results {
-			s += res.String() + "\n"
+			s.WriteString(res.String() + "\n")
 		}
 	}
 
 	if m.mode == "sendMetrics" && !m.quitting {
 		for i := 0; i < len(choices); i++ {
 			if m.cursor == i {
-				s += "(•) "
+				s.WriteString("(•) ")
 			} else {
-				s += "( ) "
+				s.WriteString("( ) ")
 			}
-			s += choices[i]
-			s += "\n"
+			s.WriteString(choices[i])
+			s.WriteString("\n")
 		}
 	}
 
 	// Quitting or not?
 	if !m.quitting {
-		s += helpStyle.Render("Press q to exit")
+		s.WriteString(helpStyle.Render("Press q to exit"))
 	}
 	if m.quitting {
-		s += "\n"
+		s.WriteString("\n")
 	}
 
-	return appStyle.Render(s)
+	return appStyle.Render(s.String())
 }
 
 func tickCmd() tea.Cmd {
