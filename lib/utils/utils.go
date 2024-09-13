@@ -20,16 +20,18 @@ const (
 	randomStringCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
-// ViewMsgProgressUpdate updates the progress bar in the bubbletea application.
+// ViewProgressUpdateMsg updates the progress bar in the bubbletea application.
 // "Percent" represents the percentage of the progress bar.
-type ViewMsgProgressUpdate struct {
+type ViewProgressUpdateMsg struct {
 	Percent float64
 }
 
-// ViewMsgStatusAndDescriptionUpdate updates the status and description in the bubbletea application.
-type ViewMsgStatusAndDescriptionUpdate struct {
-	Title       string
-	Description string
+type ViewStatusUpdateMsg struct {
+	Message    string
+	Details    string
+	Err        error
+	Completed  bool
+	ShouldQuit bool
 }
 
 // RecipeResult represents the result of a single recipe execution.

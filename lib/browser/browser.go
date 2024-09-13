@@ -151,9 +151,9 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 	n := 1
 	var result utils.RecipeResult
 	for _, step := range recipe.Steps {
-		p.Send(utils.ViewMsgStatusAndDescriptionUpdate{
-			Title:       fmt.Sprintf("Downloading invoices from %s (%d/%d):", recipe.Supplier, n, stepCountInCurrentRecipe),
-			Description: step.Description,
+		p.Send(utils.ViewStatusUpdateMsg{
+			Message: fmt.Sprintf("Downloading invoices from `%s` (%d/%d):", recipe.Supplier, n, stepCountInCurrentRecipe),
+			Details: step.Description,
 		})
 
 		stepResultChan := make(chan utils.StepResult, 1)
@@ -265,7 +265,7 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 			}
 		}
 		cs = (float64(baseCountStep) + float64(n)) / float64(totalStepCount)
-		p.Send(utils.ViewMsgProgressUpdate{Percent: cs})
+		p.Send(utils.ViewProgressUpdateMsg{Percent: cs})
 		n++
 	}
 

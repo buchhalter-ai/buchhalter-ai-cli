@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -138,85 +139,95 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 }
 
 func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksum, localOICDBSchemaChecksum string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
-	p.Send(viewMsgStatusUpdate{
-		title:    "Build archive index",
-		hasError: false,
-	})
+	p.Send(utils.ViewStatusUpdateMsg{Message: "Building archive index"})
 	logger.Info("Building document archive index ...")
 
 	err := documentArchive.BuildArchiveIndex()
 	if err != nil {
 		logger.Error("Error building document archive index", "error", err)
-		p.Send(viewMsgStatusUpdate{
-			title:      "Building document archive index",
-			hasError:   true,
-			shouldQuit: false,
-		})
+		p.Send(utils.ViewStatusUpdateMsg{Err: fmt.Errorf("error building document archive index: %w", err)})
 	}
+	p.Send(utils.ViewStatusUpdateMsg{
+		Message:   "Building archive index",
+		Completed: true,
+	})
 
 	// Check for OICDB schema updates
-	p.Send(viewMsgStatusUpdate{
-		title:    "Checking for OICDB schema updates ...",
-		hasError: false,
-	})
+	p.Send(utils.ViewStatusUpdateMsg{Message: "Checking for OICDB schema updates"})
 	logger.Info("Checking for OICDB schema updates ...", "local_checksum", localOICDBSchemaChecksum)
 
 	err = buchhalterAPIClient.UpdateOpenInvoiceCollectorDBSchemaIfAvailable(localOICDBSchemaChecksum)
 	if err != nil {
 		logger.Error("Error checking for OICDB schema updates", "error", err)
-		p.Send(viewMsgStatusUpdate{
-			title:      "Checking for OICDB schema updates",
-			hasError:   true,
-			shouldQuit: false,
-		})
+		p.Send(utils.ViewStatusUpdateMsg{Err: fmt.Errorf("error checking for OICDB schema updates: %w", err)})
 	}
+	p.Send(utils.ViewStatusUpdateMsg{
+		Message:   "Checking for OICDB schema updates",
+		Completed: true,
+	})
 
 	developmentMode := viper.GetBool("dev")
 	if !developmentMode {
 		// Check for OICDB repository updates
-		p.Send(viewMsgStatusUpdate{
-			title:    "Checking for OICDB repository updates ...",
-			hasError: false,
-		})
+		p.Send(utils.ViewStatusUpdateMsg{Message: "Checking for OICDB repository updates"})
 		logger.Info("Checking for OICDB repository updates ...", "local_checksum", localOICDBChecksum)
 
 		err = buchhalterAPIClient.UpdateOpenInvoiceCollectorDBIfAvailable(localOICDBChecksum)
 		if err != nil {
 			logger.Error("Error checking for OICDB repository updates", "error", err)
-			p.Send(viewMsgStatusUpdate{
-				title:      "Checking for OICDB repository updates",
-				hasError:   true,
-				shouldQuit: false,
-			})
+			p.Send(utils.ViewStatusUpdateMsg{Err: fmt.Errorf("error for OICDB repository updates: %w", err)})
 		}
+		p.Send(utils.ViewStatusUpdateMsg{
+			Message:   "Checking for OICDB repository updates",
+			Completed: true,
+		})
 	}
 
+	statusUpdateMessage := "Loading recipes and credentials for suppliers"
+	if len(supplier) > 0 {
+		statusUpdateMessage = fmt.Sprintf("Loading recipe and credentials for supplier `%s`", supplier)
+	}
+	p.Send(utils.ViewStatusUpdateMsg{
+		Message: statusUpdateMessage,
+	})
 	recipesToExecute, err := prepareRecipes(logger, supplier, vaultProvider, recipeParser)
-	// No credentials found for supplier/recipes
-	if len(recipesToExecute) == 0 || err != nil {
-		logger.Error("No recipes found for suppliers", "supplier", supplier, "error", err)
-		p.Send(viewMsgStatusUpdate{
-			title:      "No recipes found for suppliers",
-			hasError:   true,
-			shouldQuit: true,
+	if err != nil {
+		// No error logging needed. This is done in `prepareRecipes`
+		p.Send(utils.ViewStatusUpdateMsg{
+			Err:        fmt.Errorf("error loading recipes: %w", err),
+			ShouldQuit: true,
 		})
 		return
 	}
 
-	var t string
+	// No pair of credentials found for supplier/recipes
+	if len(recipesToExecute) == 0 {
+		loggingErrorMessage := "No recipes found for suppliers"
+		if len(supplier) > 0 {
+			loggingErrorMessage = fmt.Sprintf("No recipe found for supplier `%s`", supplier)
+		}
+		logger.Error(loggingErrorMessage, "supplier", supplier, "error", err)
+		p.Send(utils.ViewStatusUpdateMsg{
+			Err:        errors.New(loggingErrorMessage),
+			ShouldQuit: true,
+		})
+		return
+	}
+	p.Send(utils.ViewStatusUpdateMsg{
+		Message:   statusUpdateMessage,
+		Completed: true,
+	})
+
 	recipeCount := len(recipesToExecute)
 	if recipeCount == 1 {
-		t = fmt.Sprintf("Running one recipe for supplier %s ...", recipesToExecute[0].recipe.Supplier)
+		statusUpdateMessage = fmt.Sprintf("Running one recipe for supplier `%s` ...", recipesToExecute[0].recipe.Supplier)
 		logger.Info("Running one recipe ...", "supplier", recipesToExecute[0].recipe.Supplier)
 	} else {
-		t = fmt.Sprintf("Running recipes for %d suppliers ...", recipeCount)
+		statusUpdateMessage = fmt.Sprintf("Running recipes for %d suppliers ...", recipeCount)
 		logger.Info("Running recipes for multiple suppliers ...", "num_suppliers", recipeCount)
 	}
-	p.Send(viewMsgStatusUpdate{
-		title:    t,
-		hasError: false,
-	})
-	p.Send(viewMsgProgressUpdate{Percent: 0.001})
+	p.Send(utils.ViewStatusUpdateMsg{Message: statusUpdateMessage})
+	p.Send(utils.ViewProgressUpdateMsg{Percent: 0.001})
 
 	buchhalterDocumentsDirectory := viper.GetString("buchhalter_documents_directory")
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
@@ -232,34 +243,43 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 	for i := range recipesToExecute {
 		startTime := time.Now()
 		stepCountInCurrentRecipe = len(recipesToExecute[i].recipe.Steps)
-		p.Send(viewMsgStatusUpdate{
-			title:    "Downloading invoices from " + recipesToExecute[i].recipe.Supplier + ":",
-			hasError: false,
-		})
 
 		// Load username, password, totp from vault
+		p.Send(utils.ViewStatusUpdateMsg{
+			Message: fmt.Sprintf("Requesting credentials from vault for supplier `%s`", recipesToExecute[i].recipe.Supplier),
+		})
 		logger.Info("Requesting credentials from vault", "supplier", recipesToExecute[i].recipe.Supplier)
 		recipeCredentials, err := vaultProvider.GetCredentialsByItemId(recipesToExecute[i].vaultItemId)
 		if err != nil {
-			// TODO Implement better error handling
 			logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
-			fmt.Println(vaultProvider.GetHumanReadableErrorMessage(err))
+			// TODO Let `GetHumanReadableErrorMessage` return a proper error
+			p.Send(utils.ViewStatusUpdateMsg{
+				Err: errors.New(vaultProvider.GetHumanReadableErrorMessage(err)),
+			})
 			continue
 		}
+		p.Send(utils.ViewStatusUpdateMsg{
+			Message:   fmt.Sprintf("Requested credentials from vault for supplier `%s`", recipesToExecute[i].recipe.Supplier),
+			Completed: true,
+		})
 
+		p.Send(utils.ViewStatusUpdateMsg{Message: fmt.Sprintf("Downloading invoices from `%s`", recipesToExecute[i].recipe.Supplier)})
 		logger.Info("Downloading invoices ...", "supplier", recipesToExecute[i].recipe.Supplier, "supplier_type", recipesToExecute[i].recipe.Type)
 		switch recipesToExecute[i].recipe.Type {
 		case "browser":
 			browserDriver, err := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDocumentsDirectory, documentArchive, buchhalterMaxDownloadFilesPerReceipt)
 			if err != nil {
-				// TODO Implement better error handling
-				fmt.Println(err)
+				p.Send(utils.ViewStatusUpdateMsg{
+					Err: fmt.Errorf("error downloading invoices from %s: %w", recipesToExecute[i].recipe.Supplier, err),
+				})
+				// TODO Should we continue here or abort?
 			}
 
 			// Send the browser context to the view layer
 			// This is needed in case of an external abort signal (e.g. CTRL+C).
 			p.Send(updateBrowserContext{ctx: browserDriver.GetContext()})
 
+			// TODO Catch error here
 			recipeResult = browserDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = browserDriver.ChromeVersion
@@ -272,14 +292,17 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 		case "client":
 			clientDriver, err := browser.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDocumentsDirectory, documentArchive)
 			if err != nil {
-				// TODO Implement better error handling
-				fmt.Println(err)
+				p.Send(utils.ViewStatusUpdateMsg{
+					Err: fmt.Errorf("error downloading invoices from %s: %w", recipesToExecute[i].recipe.Supplier, err),
+				})
+				// TODO Should we continue here or abort?
 			}
 
 			// Send the browser context to the view layer
 			// This is needed in case of an external abort signal (e.g. CTRL+C).
 			p.Send(updateBrowserContext{ctx: clientDriver.GetContext()})
 
+			// TODO Catch error here
 			recipeResult = clientDriver.RunRecipe(p, totalStepCount, stepCountInCurrentRecipe, baseCountStep, recipesToExecute[i].recipe)
 			if ChromeVersion == "" {
 				ChromeVersion = clientDriver.ChromeVersion
@@ -299,6 +322,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 			NewFilesCount:    recipeResult.NewFilesCount,
 		}
 		RunData = append(RunData, rdx)
+
 		// TODO Check for recipeResult.LastErrorMessage
 		p.Send(viewMsgRecipeDownloadResultMsg{
 			duration:      time.Since(startTime),
@@ -307,30 +331,37 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 			errorMessage:  recipeResult.LastErrorMessage,
 		})
 		logger.Info("Downloading invoices ... completed", "supplier", recipesToExecute[i].recipe.Supplier, "supplier_type", recipesToExecute[i].recipe.Type, "duration", time.Since(startTime), "new_files", recipeResult.NewFilesCount)
+		invoiceLabel := "invoices"
+		if recipeResult.NewFilesCount == 1 {
+			invoiceLabel = "invoice"
+		}
+		p.Send(utils.ViewStatusUpdateMsg{
+			Message:   fmt.Sprintf("Downloaded %d %s from `%s`", recipeResult.NewFilesCount, invoiceLabel, recipesToExecute[i].recipe.Supplier),
+			Completed: true,
+		})
 
 		baseCountStep += stepCountInCurrentRecipe
 	}
 
 	// If we have a premium user run, upload the documents to the buchhalter API
 	logger.Info("Checking if we have a premium subscription to Buchhalter API ...")
+	p.Send(utils.ViewStatusUpdateMsg{
+		Message: "Checking if a premium subscription to Buchhalter API exists",
+	})
 	user, err := buchhalterAPIClient.GetAuthenticatedUser()
 	if err != nil {
 		logger.Error("Error retrieving authenticated user", "error", err)
-		p.Send(viewMsgStatusUpdate{
-			title:      "Retrieving authenticated user",
-			hasError:   true,
-			shouldQuit: false,
-		})
+		p.Send(utils.ViewStatusUpdateMsg{Err: fmt.Errorf("error retrieving a premium subscription to Buchhalter API: %w", err)})
 	}
 	if user != nil && len(user.User.ID) > 0 {
-		uiDocumentUploadMessage := "Uploading documents to Buchhalter API ..."
+		statusUpdateMessage = "Uploading documents to Buchhalter API"
 		if len(supplier) > 0 {
-			uiDocumentUploadMessage = fmt.Sprintf("Uploading documents of supplier %s to Buchhalter API ...", supplier)
+			statusUpdateMessage = fmt.Sprintf("Uploading documents of supplier `%s` to Buchhalter API", supplier)
 		}
-		p.Send(viewMsgStatusUpdate{
-			title:    uiDocumentUploadMessage,
-			hasError: false,
-		})
+		p.Send(utils.ViewStatusUpdateMsg{Message: statusUpdateMessage})
+
+		countUploadedFiles := 0
+		countSkippedExistFiles := 0
 		fileIndex := documentArchive.GetFileIndex()
 		for fileChecksum, fileInfo := range fileIndex {
 			// If the user is only working on a specific supplier, skip the upload of documents for other suppliers
@@ -349,6 +380,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 			// If the file exists already, skip it
 			if result {
 				logger.Info("Uploading document to Buchhalter API ... exists already", "file", fileInfo.Path, "checksum", fileChecksum)
+				countSkippedExistFiles++
 				continue
 			}
 			logger.Info("Uploading document to Buchhalter API ... does not exist already", "file", fileInfo.Path, "checksum", fileChecksum)
@@ -359,28 +391,50 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 				logger.Error("Error uploading document to Buchhalter API", "file", fileInfo.Path, "supplier", fileInfo.Supplier, "error", err)
 				continue
 			}
+			countUploadedFiles++
 		}
+		documentsLabel := "documents"
+		if countUploadedFiles == 1 {
+			documentsLabel = "document"
+		}
+		statusUpdateMessage = fmt.Sprintf("Uploaded %d %s to Buchhalter API (%d skipped, because they already exist)", countUploadedFiles, documentsLabel, countSkippedExistFiles)
+		if len(supplier) > 0 {
+			statusUpdateMessage = fmt.Sprintf("Uploaded %d %s of supplier `%s` to Buchhalter API (%d skipped, because they already exist)", countUploadedFiles, documentsLabel, supplier, countSkippedExistFiles)
+		}
+		p.Send(utils.ViewStatusUpdateMsg{
+			Message:   statusUpdateMessage,
+			Completed: true,
+		})
 	} else {
 		logger.Info("Skipping document upload to Buchhalter API due to missing premium subscription")
+		p.Send(utils.ViewStatusUpdateMsg{
+			Message:   "Skipping document upload to Buchhalter API due to missing premium subscription",
+			Completed: true,
+		})
 	}
-
+	// TODO Move to own function/bubbletea cmd
 	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")
 	if !developmentMode && alwaysSendMetrics {
 		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)
+		p.Send(utils.ViewStatusUpdateMsg{Message: "Sending usage metrics to Buchhalter API"})
 		err = buchhalterAPIClient.SendMetrics(RunData, cliVersion, ChromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
 		if err != nil {
 			logger.Error("Error sending usage metrics to Buchhalter API", "error", err)
-			p.Send(viewMsgStatusUpdate{
-				title:      "Sending usage metrics to Buchhalter API",
-				hasError:   true,
-				shouldQuit: false,
+			p.Send(utils.ViewStatusUpdateMsg{
+				Err:        fmt.Errorf("error sending usage metrics to Buchhalter API: %w", err),
+				ShouldQuit: true,
 			})
+			return
 		}
 
-		p.Send(viewMsgQuit{})
+		p.Send(utils.ViewStatusUpdateMsg{
+			Message:    "Sending usage metrics to Buchhalter API",
+			Completed:  true,
+			ShouldQuit: true,
+		})
 
 	} else if developmentMode {
-		p.Send(viewMsgQuit{})
+		p.Send(viewQuitMsg{})
 
 	} else {
 		p.Send(viewMsgModeUpdate{
@@ -391,6 +445,8 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 	}
 }
 
+// TODO Distinguish between "no recipes found" and "no credentials found"
+// TODO Rename function to something more meaningful
 func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) ([]recipeToExecute, error) {
 	var r []recipeToExecute
 
@@ -474,12 +530,17 @@ var (
 type viewModel struct {
 	mode string
 
-	// Direct output on the screen
+	// UI
+	actionsCompleted []string
+	actionInProgress string
+	actionError      string
+	actionDetails    string
+	spinner          spinner.Model
+
 	currentAction string
 	details       string
 	showProgress  bool
 	progress      progress.Model
-	spinner       spinner.Model
 	results       []viewMsgRecipeDownloadResultMsg
 	quitting      bool
 	hasError      bool
@@ -500,8 +561,8 @@ type updateBrowserContext struct {
 	ctx context.Context
 }
 
-// viewMsgQuit initiates the shutdown sequence for the bubbletea application.
-type viewMsgQuit struct{}
+// viewQuitMsg initiates the shutdown sequence for the bubbletea application.
+type viewQuitMsg struct{}
 
 // viewMsgRecipeDownloadResultMsg registers a recipe download result in the bubbletea application.
 type viewMsgRecipeDownloadResultMsg struct {
@@ -535,22 +596,6 @@ type viewMsgModeUpdate struct {
 	details string
 }
 
-// viewMsgStatusUpdate updates the status message in the bubbletea application.
-// "Status" represents the current action being performed by the app.
-//
-// Examples: Building index, Executing recipe, etc.
-type viewMsgStatusUpdate struct {
-	title      string
-	hasError   bool
-	shouldQuit bool
-}
-
-// viewMsgProgressUpdate updates the progress bar in the bubbletea application.
-// "Percent" represents the percentage of the progress bar.
-type viewMsgProgressUpdate struct {
-	Percent float64
-}
-
 type tickMsg time.Time
 
 // initialModel returns the model for the bubbletea application.
@@ -562,14 +607,12 @@ func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password, b
 	s.Style = spinnerStyle
 
 	m := viewModel{
-		mode:          "sync",
-		currentAction: "Initializing...",
-		details:       "Loading...",
-		showProgress:  true,
-		progress:      progress.New(progress.WithGradient("#9FC131", "#DBF227")),
-		spinner:       s,
-		results:       make([]viewMsgRecipeDownloadResultMsg, numLastResults),
-		hasError:      false,
+		mode:         "sync",
+		showProgress: true,
+		progress:     progress.New(progress.WithGradient("#9FC131", "#DBF227")),
+		spinner:      s,
+		results:      make([]viewMsgRecipeDownloadResultMsg, numLastResults),
+		hasError:     false,
 
 		vaultProvider:       vaultProvider,
 		buchhalterAPIClient: buchhalterAPIClient,
@@ -586,9 +629,7 @@ func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password, b
 // Init initializes the bubbletea application.
 // Returns an initial command for the application to run.
 func (m viewModel) Init() tea.Cmd {
-	return tea.Sequence(
-		m.spinner.Tick,
-	)
+	return m.spinner.Tick
 }
 
 // Update updates the bubbletea application model.
@@ -639,12 +680,34 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 
+	case utils.ViewStatusUpdateMsg:
+		m.actionInProgress = msg.Message
+		m.actionDetails = msg.Details
+
+		if msg.Completed {
+			// TODO Add error also to completed if it doesn't quit?
+			m.actionsCompleted = append(m.actionsCompleted, msg.Message)
+			m.actionInProgress = ""
+		}
+
+		if msg.Err != nil {
+			m.actionError = msg.Err.Error()
+		}
+
+		if msg.ShouldQuit {
+			return m, func() tea.Msg {
+				return viewQuitMsg{}
+			}
+		}
+
+		return m, nil
+
 	case updateBrowserContext:
 		m.logger.Info("Updating browser context")
 		m.browserCtx = msg.ctx
 		return m, nil
 
-	case viewMsgQuit:
+	case viewQuitMsg:
 		m.logger.Info("Initiating shutdown sequence")
 
 		mn := quit(m)
@@ -667,36 +730,17 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case viewMsgStatusUpdate:
-		m.currentAction = msg.title
-		if msg.hasError {
-			m.hasError = true
-		}
-
-		if msg.shouldQuit {
-			return m, tea.Quit
-		}
-		return m, nil
-
 	case viewMsgModeUpdate:
-		m.currentAction = msg.title
-		m.details = msg.details
+		m.actionInProgress = msg.title
+		m.actionDetails = msg.details
+
 		m.mode = msg.mode
 		m.showProgress = false
 		return m, nil
 
-	case viewMsgProgressUpdate:
+	case utils.ViewProgressUpdateMsg:
 		cmd := m.progress.SetPercent(msg.Percent)
 		return m, cmd
-
-	case utils.ViewMsgProgressUpdate:
-		cmd := m.progress.SetPercent(msg.Percent)
-		return m, cmd
-
-	case utils.ViewMsgStatusAndDescriptionUpdate:
-		m.currentAction = msg.Title
-		m.details = msg.Description
-		return m, nil
 
 	case tickMsg:
 		if m.progress.Percent() == 1.0 {
@@ -732,15 +776,38 @@ func (m viewModel) View() string {
 		textStyleGrayBold(fmt.Sprintf("Using OICDB %s and CLI %s", m.recipeParser.OicdbVersion, cliVersion)),
 	) + "\n")
 
-	if !m.hasError {
-		s.WriteString(m.spinner.View() + m.currentAction)
-		s.WriteString(helpStyle.Render("  " + m.details))
-	} else {
-		s.WriteString(errorStyle.Render("ERROR: " + m.currentAction))
-		s.WriteString(helpStyle.Render("  " + m.details))
+	for _, actionCompleted := range m.actionsCompleted {
+		s.WriteString(checkMark.Render() + " " + textStyleBold(actionCompleted) + "\n")
+	}
+
+	if len(m.actionInProgress) > 0 {
+		if len(m.actionDetails) > 0 {
+			s.WriteString(m.spinner.View() + textStyleBold(m.actionInProgress))
+			s.WriteString(helpStyle.Render("  " + m.actionDetails))
+		} else {
+			s.WriteString(m.spinner.View() + textStyleBold(m.actionInProgress) + "\n")
+		}
+	}
+
+	if len(m.actionError) > 0 {
+		s.WriteString(errorkMark.Render() + " " + errorStyle.Render(m.actionError) + "\n")
+		if len(m.actionDetails) > 0 {
+			s.WriteString(helpStyle.Render("  " + m.actionDetails))
+		}
 	}
 
 	s.WriteString("\n")
+
+	if len(m.currentAction) > 0 {
+		if !m.hasError {
+			s.WriteString(m.spinner.View() + m.currentAction)
+			s.WriteString(helpStyle.Render("  " + m.details))
+		} else {
+			s.WriteString(errorStyle.Render("ERROR: " + m.currentAction))
+			s.WriteString(helpStyle.Render("  " + m.details))
+		}
+		s.WriteString("\n")
+	}
 
 	if m.showProgress {
 		s.WriteString(m.progress.View() + "\n\n")
@@ -788,10 +855,11 @@ func quit(m viewModel) viewModel {
 		m.showProgress = false
 
 	} else {
-		m.currentAction = "Thanks for using buchhalter.ai!"
+		m.actionInProgress = "Thanks for using buchhalter.ai!"
+		m.actionDetails = "HAVE A NICE DAY! :)"
+
 		m.quitting = true
 		m.showProgress = false
-		m.details = "HAVE A NICE DAY! :)"
 	}
 
 	// Stopping the browser instance
