@@ -52,6 +52,18 @@ type StepResult struct {
 	Break   bool
 }
 
+type UIActionStyle string
+
+const (
+	UIActionStyleSuccess UIActionStyle = "success"
+	UIActionStyleError   UIActionStyle = "error"
+)
+
+type UIAction struct {
+	Message string
+	Style   UIActionStyle
+}
+
 func InitSupplierDirectories(buchhalterDirectory, supplier string) (string, string, error) {
 	downloadsDirectory := filepath.Join(buchhalterDirectory, "_tmp", supplier)
 	documentsDirectory := filepath.Join(buchhalterDirectory, supplier)

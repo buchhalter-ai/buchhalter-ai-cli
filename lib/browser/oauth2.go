@@ -109,8 +109,9 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 	ctx := b.browserCtx
 	defer b.browserCancel()
 
-	// get chrome version for metrics
-	if b.ChromeVersion == "" {
+	// Get chrome version for metrics
+	b.ChromeVersion = strings.TrimSpace(b.ChromeVersion)
+	if len(b.ChromeVersion) == 0 {
 		err := chromedp.Run(ctx, chromedp.Tasks{
 			chromedp.Navigate("chrome://version"),
 			chromedp.Text(`#version`, &b.ChromeVersion, chromedp.NodeVisible),
@@ -123,7 +124,7 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 	}
 	b.logger.Info("Starting client auth chrome browser driver ... completed ", "recipe", recipe.Supplier, "recipe_version", recipe.Version, "chrome_version", b.ChromeVersion)
 
-	// create download directories
+	// Create download directories
 	var err error
 	b.downloadsDirectory, b.documentsDirectory, err = utils.InitSupplierDirectories(b.buchhalterDocumentsDirectory, recipe.Supplier)
 	if err != nil {
