@@ -224,7 +224,7 @@ func (m ViewModelVaultSelect) View() string {
 		for i := 0; i < len(m.selectionChoices); i++ {
 			currentConfigValue := ""
 			if m.selectionChoices[i].Name == m.selectionChoice || m.selectionChoices[i].ID == m.selectionChoice {
-				currentConfigValue = textStyleBold(" (current configured)")
+				currentConfigValue = textStyleBold(" (currently configured)")
 			}
 			if m.selectionCursor == i {
 				s.WriteString("(•) ")
