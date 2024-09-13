@@ -57,6 +57,7 @@ var textStyleBold = lipgloss.NewStyle().Bold(true).Render
 var headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#9FC131")).Render
 var checkMark = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
 var errorkMark = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).SetString("X")
+var thanksMark = lipgloss.NewStyle().SetString("🙏")
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{

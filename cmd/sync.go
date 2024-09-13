@@ -453,7 +453,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 			Completed: true,
 		})
 	}
-	// TODO Move to own function/bubbletea cmd
+
 	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")
 	if !developmentMode && alwaysSendMetrics {
 		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)
@@ -469,7 +469,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 		}
 
 		p.Send(utils.ViewStatusUpdateMsg{
-			Message:    "Sending usage metrics to Buchhalter API",
+			Message:    "Sent usage metrics to Buchhalter API",
 			Completed:  true,
 			ShouldQuit: true,
 		})
@@ -531,22 +531,20 @@ func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.P
 	return r, nil
 }
 
-func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, vaultVersion, oicdbVersion string) {
-	// TODO Add logging for sendMetrics
-
+func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, vaultVersion, oicdbVersion string) error {
 	err := buchhalterAPIClient.SendMetrics(RunData, cliVersion, ChromeVersion, vaultVersion, oicdbVersion)
 	if err != nil {
-		// TODO Implement better error handling
-		fmt.Println(err)
+		return fmt.Errorf("error sending usage metrics to Buchhalter API: %w", err)
 	}
 	if a {
 		viper.Set("buchhalter_always_send_metrics", true)
 		err = viper.WriteConfig()
 		if err != nil {
-			// TODO Implement better error handling
-			fmt.Println(err)
+			return fmt.Errorf("error writing config file with value buchhalter_always_send_metrics=true: %w", err)
 		}
 	}
+
+	return nil
 }
 
 /**
@@ -564,7 +562,6 @@ var (
 	durationStyle = dotStyle
 	spinnerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#D6D58E"))
 	appStyle      = lipgloss.NewStyle().Margin(1, 2, 0, 2)
-	choices       = []string{"Yes", "No", "Always yes (don't ask again)"}
 )
 
 // viewModel is the bubbletea application main viewModel (view)
@@ -585,9 +582,13 @@ type viewModel struct {
 	results       []viewMsgRecipeDownloadResultMsg
 	quitting      bool
 	hasError      bool
-	cursor        int
-	choice        string
 
+	// sendMetrics selection
+	selectionCursor  int
+	selectionChoice  string
+	selectionChoices []string
+
+	// Buchhalter
 	vaultProvider       *vault.Provider1Password
 	buchhalterAPIClient *repository.BuchhalterAPIClient
 	recipeParser        *parser.RecipeParser
@@ -657,6 +658,9 @@ func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password, b
 		results:      make([]viewMsgRecipeDownloadResultMsg, numLastResults),
 		hasError:     false,
 
+		// sendMetrics selection
+		selectionChoices: []string{"Yes", "No", "Always yes (don't ask again)"},
+
 		vaultProvider:       vaultProvider,
 		buchhalterAPIClient: buchhalterAPIClient,
 		recipeParser:        recipeParser,
@@ -690,34 +694,51 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			// Send the choice on the channel and exit.
-			m.choice = choices[m.cursor]
+			m.selectionChoice = m.selectionChoices[m.selectionCursor]
 			m.mode = "sync"
-			switch m.choice {
+			switch m.selectionChoice {
 			case "Yes":
-				sendMetrics(m.buchhalterAPIClient, false, m.vaultProvider.Version, m.recipeParser.OicdbVersion)
-				mn := quit(m)
-				return mn, tea.Quit
+				return m, func() tea.Msg {
+					err := sendMetrics(m.buchhalterAPIClient, false, m.vaultProvider.Version, m.recipeParser.OicdbVersion)
+					return utils.ViewStatusUpdateMsg{
+						Message:    "Sent usage metrics to Buchhalter API",
+						Err:        err,
+						Completed:  true,
+						ShouldQuit: true,
+					}
+				}
 
 			case "No":
-				mn := quit(m)
-				return mn, tea.Quit
+				return m, func() tea.Msg {
+					return utils.ViewStatusUpdateMsg{
+						Message:    "No usage metrics sent to Buchhalter API",
+						Completed:  true,
+						ShouldQuit: true,
+					}
+				}
 
 			case "Always yes (don't ask again)":
-				sendMetrics(m.buchhalterAPIClient, true, m.vaultProvider.Version, m.recipeParser.OicdbVersion)
-				mn := quit(m)
-				return mn, tea.Quit
+				return m, func() tea.Msg {
+					err := sendMetrics(m.buchhalterAPIClient, true, m.vaultProvider.Version, m.recipeParser.OicdbVersion)
+					return utils.ViewStatusUpdateMsg{
+						Message:    "Sent usage metrics to Buchhalter API",
+						Err:        err,
+						Completed:  true,
+						ShouldQuit: true,
+					}
+				}
 			}
 
 		case "down", "j":
-			m.cursor++
-			if m.cursor >= len(choices) {
-				m.cursor = 0
+			m.selectionCursor++
+			if m.selectionCursor >= len(m.selectionChoices) {
+				m.selectionCursor = 0
 			}
 
 		case "up", "k":
-			m.cursor--
-			if m.cursor < 0 {
-				m.cursor = len(choices) - 1
+			m.selectionCursor--
+			if m.selectionCursor < 0 {
+				m.selectionCursor = len(m.selectionChoices) - 1
 			}
 		}
 
@@ -832,6 +853,8 @@ func (m viewModel) View() string {
 			s.WriteString(checkMark.Render() + " " + textStyleBold(actionCompleted.Message) + "\n")
 		case utils.UIActionStyleError:
 			s.WriteString(errorkMark.Render() + " " + errorStyle.Render(actionCompleted.Message) + "\n")
+		case utils.UIActionStyleThanks:
+			s.WriteString(thanksMark.Render() + " " + textStyleBold(actionCompleted.Message) + "\n")
 		}
 	}
 
@@ -853,14 +876,9 @@ func (m viewModel) View() string {
 
 	s.WriteString("\n")
 
-	if len(m.currentAction) > 0 {
-		if !m.hasError {
-			s.WriteString(m.spinner.View() + m.currentAction)
-			s.WriteString(helpStyle.Render("  " + m.details))
-		} else {
-			s.WriteString(errorStyle.Render("ERROR: " + m.currentAction))
-			s.WriteString(helpStyle.Render("  " + m.details))
-		}
+	if len(m.currentAction) > 0 && m.hasError {
+		s.WriteString(errorStyle.Render("ERROR: " + m.currentAction))
+		s.WriteString(helpStyle.Render("  " + m.details))
 		s.WriteString("\n")
 	}
 
@@ -875,23 +893,22 @@ func (m viewModel) View() string {
 	}
 
 	if m.mode == "sendMetrics" && !m.quitting {
-		for i := 0; i < len(choices); i++ {
-			if m.cursor == i {
+		for i := 0; i < len(m.selectionChoices); i++ {
+			if m.selectionCursor == i {
 				s.WriteString("(•) ")
 			} else {
 				s.WriteString("( ) ")
 			}
-			s.WriteString(choices[i])
+			s.WriteString(m.selectionChoices[i])
 			s.WriteString("\n")
 		}
 	}
 
+	s.WriteString("\n")
+
 	// Quitting or not?
 	if !m.quitting {
 		s.WriteString(helpStyle.Render("Press q to exit"))
-	}
-	if m.quitting {
-		s.WriteString("\n")
 	}
 
 	return appStyle.Render(s.String())
@@ -904,17 +921,18 @@ func tickCmd() tea.Cmd {
 }
 
 func quit(m viewModel) viewModel {
+	m.quitting = true
+	m.showProgress = false
+
 	if m.hasError {
-		m.currentAction = "ERROR while running recipes!"
-		m.quitting = true
-		m.showProgress = false
+		m.currentAction = "While running recipes!"
 
 	} else {
-		m.actionInProgress = "Thanks for using buchhalter.ai!"
-		m.actionDetails = "HAVE A NICE DAY! :)"
-
-		m.quitting = true
-		m.showProgress = false
+		m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+			Message: "Thanks for using buchhalter.ai!",
+			Style:   utils.UIActionStyleThanks,
+		})
+		m.actionDetails = "HAVE A NICE DAY! 😎"
 	}
 
 	// Stopping the browser instance
