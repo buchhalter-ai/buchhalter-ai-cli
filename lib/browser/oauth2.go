@@ -271,8 +271,8 @@ func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, re
 
 	verifier, challenge, err := utils.Oauth2Pkce(b.oauth2PkceVerifierLength)
 	if err != nil {
-		// TODO implement error handling
-		fmt.Println(err)
+		b.logger.Error("Error while creating the OAuth2 Pkce", "error", err.Error())
+		return utils.StepResult{Status: "error", Message: fmt.Sprintf("error while creating the OAuth2 Pkce: %s", err.Error())}
 	}
 
 	state := utils.RandomString(20)
@@ -309,29 +309,27 @@ func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, re
 		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
 	}
 
-	/** Check for 2FA authentication */
+	// Check for 2FA authentication
 	var faNodes []*cdp.Node
 	err = chromedp.Run(ctx,
 		b.run(5*time.Second, chromedp.WaitVisible(`#form-input-passcode`, chromedp.ByID)),
 		chromedp.Nodes("#form-input-passcode", &faNodes, chromedp.AtLeast(0)),
 	)
-
 	if err != nil {
 		b.logger.Error("Error while logging in", "error", err.Error())
 		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
 	}
 
-	/** Insert 2FA code */
+	// Insert 2FA code
 	if len(faNodes) > 0 {
 		err = chromedp.Run(ctx,
 			chromedp.SendKeys("#form-input-passcode", credentials.Totp, chromedp.ByID),
 			chromedp.Click("#form-submit", chromedp.ByID),
 		)
-	}
-
-	if err != nil {
-		b.logger.Error("Error while logging in", "error", err.Error())
-		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
+		if err != nil {
+			b.logger.Error("Error while logging in (2FA)", "error", err.Error())
+			return utils.StepResult{Status: "error", Message: "error while logging in (2fa): " + err.Error()}
+		}
 	}
 
 	/** Request access token */
@@ -340,7 +338,6 @@ func (b *ClientAuthBrowserDriver) stepOauth2Authenticate(ctx context.Context, re
 		chromedp.Sleep(2*time.Second),
 		chromedp.Location(&u),
 	)
-
 	if err != nil {
 		b.logger.Error("Error while requesting access token", "error", err.Error())
 		return utils.StepResult{Status: "error", Message: "error while logging in: " + err.Error()}
@@ -404,8 +401,7 @@ func (b *ClientAuthBrowserDriver) stepOauth2PostAndGetItems(ctx context.Context,
 		var jsr interface{}
 		err := json.Unmarshal(body, &jsr)
 		if err != nil {
-			// TODO Implement better error handling
-			panic(err)
+			return utils.StepResult{Status: "error", Message: fmt.Sprintf("Error while parsing JSON: %s", err), Break: true}
 		}
 
 		ids := extractJsonValue(jsr, step.ExtractDocumentIds)
@@ -435,8 +431,7 @@ func (b *ClientAuthBrowserDriver) stepOauth2PostAndGetItems(ctx context.Context,
 			}
 			downloadSuccessful, err := b.doRequest(ctx, url, step.DocumentRequestMethod, step.DocumentRequestHeaders, f, nil)
 			if err != nil {
-				// TODO implement error handling
-				fmt.Println(err)
+				return utils.StepResult{Status: "error", Message: fmt.Sprintf("Error while downloading invoices: %s", err.Error())}
 			}
 			if !downloadSuccessful {
 				return utils.StepResult{Status: "error", Message: "Error while downloading invoices"}

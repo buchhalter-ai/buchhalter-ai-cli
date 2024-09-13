@@ -137,9 +137,8 @@ func (b *BrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, stepCountI
 			WithDownloadPath(b.downloadsDirectory).
 			WithEventsEnabled(true),
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			// TODO Implement error handling
-			_ = b.waitForLoadEvent(ctx)
-			return nil
+			err = b.waitForLoadEvent(ctx)
+			return err
 		}),
 	})
 	if err != nil {
@@ -465,8 +464,7 @@ func (b *BrowserDriver) stepTransform(step parser.Step) utils.StepResult {
 	case "unzip":
 		zipFiles, err := utils.FindFiles(b.downloadsDirectory, ".zip")
 		if err != nil {
-			// TODO improve error handling
-			fmt.Println(err)
+			return utils.StepResult{Status: "error", Message: fmt.Sprintf("Error while finding zip files: %s", err)}
 		}
 		for _, s := range zipFiles {
 			b.logger.Debug("Executing recipe step ... unzipping file", "action", step.Action, "source", s, "destination", b.downloadsDirectory)
