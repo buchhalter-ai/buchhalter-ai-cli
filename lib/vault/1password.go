@@ -63,7 +63,7 @@ func (p *Provider1Password) initializeVaultversion() error {
 func (p *Provider1Password) LoadVaultItems() (Items, error) {
 	// Build item list command
 	// #nosec G204
-	cmdArgs := p.buildVaultCommandArguments([]string{"item", "list"}, true)
+	cmdArgs := p.buildVaultCommandArguments([]string{"item", "list"}, true, true)
 	itemListResponse, err := exec.Command(p.binary, cmdArgs...).Output()
 	if err != nil {
 		return nil, ProviderConnectionError{
@@ -99,7 +99,7 @@ func (p *Provider1Password) LoadVaultItems() (Items, error) {
 }
 
 func (p Provider1Password) GetCredentialsByItemId(itemId string) (*Credentials, error) {
-	cmdArgs := p.buildVaultCommandArguments([]string{"item", "get", itemId}, false)
+	cmdArgs := p.buildVaultCommandArguments([]string{"item", "get", itemId}, true, false)
 
 	// #nosec G204
 	itemGetResponse, err := exec.Command(p.binary, cmdArgs...).Output()
@@ -131,9 +131,9 @@ func (p Provider1Password) GetCredentialsByItemId(itemId string) (*Credentials, 
 	return credentials, nil
 }
 
-func (p Provider1Password) buildVaultCommandArguments(baseCmd []string, includeTag bool) []string {
+func (p Provider1Password) buildVaultCommandArguments(baseCmd []string, limitVault, includeTag bool) []string {
 	cmdArgs := baseCmd
-	if len(p.base) > 0 {
+	if limitVault && len(p.base) > 0 {
 		cmdArgs = append(cmdArgs, "--vault", p.base)
 	}
 	if includeTag && len(p.tag) > 0 {
@@ -142,6 +142,30 @@ func (p Provider1Password) buildVaultCommandArguments(baseCmd []string, includeT
 	cmdArgs = append(cmdArgs, "--format", "json")
 
 	return cmdArgs
+}
+
+func (p *Provider1Password) GetVaults() ([]Vault, error) {
+	cmdArgs := p.buildVaultCommandArguments([]string{"vault", "list"}, false, false)
+	vaultListResponse, err := exec.Command(p.binary, cmdArgs...).Output()
+	if err != nil {
+		return nil, ProviderConnectionError{
+			Code: ProviderConnectionErrorCode,
+			Cmd:  fmt.Sprintf("%s %s", p.binary, strings.Join(cmdArgs, " ")),
+			Err:  err,
+		}
+	}
+
+	var vaultList []Vault
+	err = json.Unmarshal(vaultListResponse, &vaultList)
+	if err != nil {
+		return nil, ProviderResponseParsingError{
+			Code: ProviderResponseParsingErrorCode,
+			Cmd:  fmt.Sprintf("%s %s", p.binary, strings.Join(cmdArgs, " ")),
+			Err:  err,
+		}
+	}
+
+	return vaultList, nil
 }
 
 func (p *Provider1Password) GetHumanReadableErrorMessage(err error) string {
