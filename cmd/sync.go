@@ -315,6 +315,7 @@ func runRecipes(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksu
 		case "client":
 			clientDriver, err := browser.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDocumentsDirectory, documentArchive)
 			if err != nil {
+
 				logger.Error("Error initializing a new client auth browser driver", "error", err, "supplier", recipesToExecute[i].recipe.Supplier)
 				p.Send(utils.ViewStatusUpdateMsg{
 					Err:       fmt.Errorf("error initializing a new client auth browser for supplier `%s`: %w", recipesToExecute[i].recipe.Supplier, err),

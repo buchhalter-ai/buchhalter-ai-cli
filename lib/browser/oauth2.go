@@ -143,7 +143,7 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 	n := 1
 	for _, step := range recipe.Steps {
 		p.Send(utils.ViewStatusUpdateMsg{
-			Message: fmt.Sprintf("Downloading invoices from %s (%d/%d):", recipe.Supplier, n, stepCountInCurrentRecipe),
+			Message: fmt.Sprintf("Downloading invoices from `%s` (%d/%d):", recipe.Supplier, n, stepCountInCurrentRecipe),
 			Details: step.Description,
 		})
 
