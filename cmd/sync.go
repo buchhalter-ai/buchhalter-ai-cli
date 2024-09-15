@@ -106,8 +106,8 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 
 	// Init the bubbletea program
-	viewModel := initialModel(logger, buchhalterAPIClient)
-	p := tea.NewProgram(viewModel)
+	viewModelSync := initviewModelSync(logger, buchhalterAPIClient)
+	p := tea.NewProgram(viewModelSync)
 
 	// Run the primary logic
 	go runSyncCommandLogic(p, logger, config, supplier, buchhalterAPIClient)
@@ -641,8 +641,8 @@ var (
 	appStyle      = lipgloss.NewStyle().Margin(1, 2, 0, 2)
 )
 
-// viewModel is the bubbletea application main viewModel (view)
-type viewModel struct {
+// viewModelSync is the bubbletea application main view model
+type viewModelSync struct {
 	mode string
 
 	// UI
@@ -718,15 +718,15 @@ type viewMsgModeUpdate struct {
 
 type tickMsg time.Time
 
-// initialModel returns the model for the bubbletea application.
-func initialModel(logger *slog.Logger, buchhalterAPIClient *repository.BuchhalterAPIClient) viewModel {
+// initviewModelSync returns the model for the bubbletea application.
+func initviewModelSync(logger *slog.Logger, buchhalterAPIClient *repository.BuchhalterAPIClient) viewModelSync {
 	const numLastResults = 5
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = spinnerStyle
 
-	m := viewModel{
+	m := viewModelSync{
 		actionsCompleted: []utils.UIAction{},
 
 		mode:         "sync",
@@ -752,13 +752,13 @@ func initialModel(logger *slog.Logger, buchhalterAPIClient *repository.Buchhalte
 
 // Init initializes the bubbletea application.
 // Returns an initial command for the application to run.
-func (m viewModel) Init() tea.Cmd {
+func (m viewModelSync) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
 // Update updates the bubbletea application model.
 // Handles incoming events and updates the model accordingly.
-func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m viewModelSync) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
@@ -930,7 +930,7 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the bubbletea application view.
 // Renders the UI based on the data in the model.
-func (m viewModel) View() string {
+func (m viewModelSync) View() string {
 	s := strings.Builder{}
 	s.WriteString(fmt.Sprintf(
 		"%s\n%s\n%s%s\n%s\n",
@@ -1016,7 +1016,7 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-func quit(m viewModel) viewModel {
+func quit(m viewModelSync) viewModelSync {
 	m.quitting = true
 	m.showProgress = false
 
