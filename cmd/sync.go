@@ -202,9 +202,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	})
 
 	p.Send(buchhalterMetricsRecord{
-		CliVersion: cliVersion,
-		// TODO Send ChromeVersion (not available in this scope)
-		// ChromeVersion: ChromeVersion,
+		CliVersion:   cliVersion,
 		VaultVersion: vaultProvider.Version,
 		OicdbVersion: recipeParser.OicdbVersion,
 	})
@@ -419,6 +417,11 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 			// In case of an external abort signal (e.g. CTRL+C), bubbletea will call `chromedp.Cancel()`.
 		}
 
+		// Send ChromeVersion into metrics
+		if len(ChromeVersion) > 0 {
+			p.Send(buchhalterMetricsRecord{ChromeVersion: ChromeVersion})
+		}
+
 		// TODO recipeResult can be empty! (not nil, but without values)
 
 		rdx := repository.RunDataSupplier{
@@ -605,8 +608,8 @@ func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.P
 	return r, nil
 }
 
-func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, cliVersion, ChromeVersion, vaultVersion, oicdbVersion string) error {
-	err := buchhalterAPIClient.SendMetrics(RunData, cliVersion, ChromeVersion, vaultVersion, oicdbVersion)
+func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, cliVersion, chromeVersion, vaultVersion, oicdbVersion string) error {
+	err := buchhalterAPIClient.SendMetrics(RunData, cliVersion, chromeVersion, vaultVersion, oicdbVersion)
 	if err != nil {
 		return fmt.Errorf("error sending usage metrics to Buchhalter API: %w", err)
 	}
