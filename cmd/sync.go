@@ -24,13 +24,34 @@ import (
 )
 
 var (
+	// TODO Remove global variable ChromeVersion
 	ChromeVersion string
-	RunData       repository.RunData
+	// TODO Remove global variable RunData
+	RunData repository.RunData
 )
 
 type recipeToExecute struct {
 	recipe      *parser.Recipe
 	vaultItemId string
+}
+
+type buchhalterMetricsRecord struct {
+	CliVersion    string `json:"cliVersion,omitempty"`
+	OicdbVersion  string `json:"oicdbVersion,omitempty"`
+	VaultVersion  string `json:"vaultVersion,omitempty"`
+	ChromeVersion string `json:"chromeVersion,omitempty"`
+}
+
+type syncCommandConfig struct {
+	// Buchhalter
+	buchhalterDirectory          string
+	buchhalterConfigDirectory    string
+	buchhalterDocumentsDirectory string
+
+	// Vault
+	vaultConfigBinary string
+	vaultConfigBase   string
+	vaultConfigTag    string
 }
 
 var syncCmd = &cobra.Command{
@@ -50,15 +71,23 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		supplier = cmdArgs[0]
 	}
 
+	config := &syncCommandConfig{
+		buchhalterDirectory:          viper.GetString("buchhalter_directory"),
+		buchhalterConfigDirectory:    viper.GetString("buchhalter_config_directory"),
+		buchhalterDocumentsDirectory: viper.GetString("buchhalter_documents_directory"),
+		vaultConfigBinary:            viper.GetString("credential_provider_cli_command"),
+		vaultConfigBase:              viper.GetString("credential_provider_vault"),
+		vaultConfigTag:               viper.GetString("credential_provider_item_tag"),
+	}
+
 	// Init logging
-	buchhalterDirectory := viper.GetString("buchhalter_directory")
 	developmentMode := viper.GetBool("dev")
 	logSetting, err := cmd.Flags().GetBool("log")
 	if err != nil {
 		exitMessage := fmt.Sprintf("Error reading log flag: %s", err)
 		exitWithLogo(exitMessage)
 	}
-	logger, err := initializeLogger(logSetting, developmentMode, buchhalterDirectory)
+	logger, err := initializeLogger(logSetting, developmentMode, config.buchhalterDirectory)
 	if err != nil {
 		exitMessage := fmt.Sprintf("Error on initializing logging: %s", err)
 		exitWithLogo(exitMessage)
@@ -66,71 +95,24 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	logger.Info("Booting up", "development_mode", developmentMode)
 	defer logger.Info("Shutting down")
 
-	// Init document archive
-	buchhalterDocumentsDirectory := viper.GetString("buchhalter_documents_directory")
-	documentArchive := archive.NewDocumentArchive(logger, buchhalterDocumentsDirectory)
-
-	// Init vault provider
-	vaultConfigBinary := viper.GetString("credential_provider_cli_command")
-	vaultConfigBase := viper.GetString("credential_provider_vault")
-	vaultConfigTag := viper.GetString("credential_provider_item_tag")
-	logger.Info("Initializing credential provider", "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
-	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, vaultConfigBinary, vaultConfigBase, vaultConfigTag)
-	if err != nil {
-		logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
-		exitMessage := fmt.Sprintln(vaultProvider.GetHumanReadableErrorMessage(err))
-		exitWithLogo(exitMessage)
-	}
-
-	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
-	recipeParser := parser.NewRecipeParser(logger, buchhalterConfigDirectory, buchhalterDirectory)
-
-	localOICDBChecksum, err := recipeParser.GetChecksumOfLocalOICDB()
-	if err != nil {
-		logger.Error("Error calculating checksum of local Open Invoice Collector Database", "error", err)
-		exitMessage := fmt.Sprintf("Error calculating checksum of local Open Invoice Collector Database: %s", err)
-		exitWithLogo(exitMessage)
-	}
-
-	localOICDBSchemaChecksum, err := recipeParser.GetChecksumOfLocalOICDBSchema()
-	if err != nil {
-		logger.Error("Error calculating checksum of local Open Invoice Collector Database Schema", "error", err)
-		exitMessage := fmt.Sprintf("Error calculating checksum of local Open Invoice Collector Database Schema: %s", err)
-		exitWithLogo(exitMessage)
-	}
-
+	// Init Buchhalter API client
 	apiHost := viper.GetString("buchhalter_api_host")
 	apiToken := viper.GetString("buchhalter_api_token")
-	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiToken, cliVersion)
+	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, config.buchhalterConfigDirectory, apiToken, cliVersion)
 	if err != nil {
 		logger.Error("Error initializing Buchhalter API client", "error", err)
 		exitMessage := fmt.Sprintf("Error initializing Buchhalter API client: %s", err)
 		exitWithLogo(exitMessage)
 	}
 
-	viewModel := initialModel(logger, vaultProvider, buchhalterAPIClient, recipeParser)
+	// Init the bubbletea program
+	viewModel := initialModel(logger, buchhalterAPIClient)
 	p := tea.NewProgram(viewModel)
 
-	// Load vault items/try to connect to vault
-	vaultItems, err := vaultProvider.LoadVaultItems()
-	if err != nil {
-		logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
-		exitMessage := fmt.Sprintln(vaultProvider.GetHumanReadableErrorMessage(err))
-		exitWithLogo(exitMessage)
-	}
-
-	// Check if vault items are available
-	if len(vaultItems) == 0 {
-		// TODO Add link with help article
-		logger.Error("No credential items loaded from vault", "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
-		exitMessage := fmt.Sprintf("No credential items found in vault '%s' with tag '%s'. Please check your 1password vault items.", vaultConfigBase, vaultConfigTag)
-		exitWithLogo(exitMessage)
-	}
-	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", vaultConfigBinary, "vault", vaultConfigBase, "tag", vaultConfigTag)
-
 	// Run the primary logic
-	go runSyncCommandLogic(p, logger, supplier, localOICDBChecksum, localOICDBSchemaChecksum, vaultProvider, documentArchive, recipeParser, buchhalterAPIClient)
+	go runSyncCommandLogic(p, logger, config, supplier, buchhalterAPIClient)
 
+	// Run the bubbletea program
 	if _, err := p.Run(); err != nil {
 		logger.Error("Error running program", "error", err)
 		exitMessage := fmt.Sprintf("Error running program: %s", err)
@@ -138,11 +120,101 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 }
 
-func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, supplier, localOICDBChecksum, localOICDBSchemaChecksum string, vaultProvider *vault.Provider1Password, documentArchive *archive.DocumentArchive, recipeParser *parser.RecipeParser, buchhalterAPIClient *repository.BuchhalterAPIClient) {
+func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncCommandConfig, supplier string, buchhalterAPIClient *repository.BuchhalterAPIClient) {
+	// Init vault provider
+	logger.Info("Initializing credential provider", "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfigBase, "tag", config.vaultConfigTag)
+	statusUpdateMessage := fmt.Sprintf("Initializing credential provider 1Password with vault '%s' and tag '%s'", config.vaultConfigBase, config.vaultConfigTag)
+	p.Send(utils.ViewStatusUpdateMsg{Message: statusUpdateMessage})
+	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, config.vaultConfigBinary, config.vaultConfigBase, config.vaultConfigTag)
+	if err != nil {
+		logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
+		exitMessage := fmt.Sprintln(vaultProvider.GetHumanReadableErrorMessage(err))
+		p.Send(utils.ViewStatusUpdateMsg{
+			Err:        fmt.Errorf("error initializing credential provider 1Password: %s", exitMessage),
+			Completed:  true,
+			ShouldQuit: true,
+		})
+		return
+	}
+
+	// Load vault items/try to connect to vault
+	vaultItems, err := vaultProvider.LoadVaultItems()
+	if err != nil {
+		logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
+		exitMessage := fmt.Sprintln(vaultProvider.GetHumanReadableErrorMessage(err))
+		p.Send(utils.ViewStatusUpdateMsg{
+			Err:        fmt.Errorf("error initializing credential provider 1Password: %s", exitMessage),
+			Completed:  true,
+			ShouldQuit: true,
+		})
+		return
+	}
+	p.Send(utils.ViewStatusUpdateMsg{
+		Message:   statusUpdateMessage,
+		Completed: true,
+	})
+
+	// Check if vault items are available
+	if len(vaultItems) == 0 {
+		// TODO Add link with help article
+		logger.Error("No credential items loaded from vault", "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfigBase, "tag", config.vaultConfigTag)
+		exitMessage := fmt.Sprintf("No credential items found in vault '%s' with tag '%s'. Please check your 1password vault items.", config.vaultConfigBase, config.vaultConfigTag)
+		p.Send(utils.ViewStatusUpdateMsg{
+			Err:        fmt.Errorf("error initializing credential provider 1Password: %s", exitMessage),
+			Completed:  true,
+			ShouldQuit: true,
+		})
+		return
+	}
+	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfigBase, "tag", config.vaultConfigTag)
+	p.Send(utils.ViewStatusUpdateMsg{
+		Message:   fmt.Sprintf("Loaded %d credential items from vault '%s' with tag '%s'", len(vaultItems), config.vaultConfigBase, config.vaultConfigTag),
+		Completed: true,
+	})
+
+	// Init recipe parser
+	p.Send(utils.ViewStatusUpdateMsg{Message: "Initializing recipe parser to read local Open Invoice Collector Database"})
+	recipeParser := parser.NewRecipeParser(logger, config.buchhalterConfigDirectory, config.buchhalterDirectory)
+	localOICDBChecksum, err := recipeParser.GetChecksumOfLocalOICDB()
+	if err != nil {
+		logger.Error("Error calculating checksum of local Open Invoice Collector Database", "error", err)
+		p.Send(utils.ViewStatusUpdateMsg{
+			Err:        fmt.Errorf("error calculating checksum of local Open Invoice Collector Database: %w", err),
+			Completed:  true,
+			ShouldQuit: true,
+		})
+		return
+	}
+
+	localOICDBSchemaChecksum, err := recipeParser.GetChecksumOfLocalOICDBSchema()
+	if err != nil {
+		logger.Error("Error calculating checksum of local Open Invoice Collector Database Schema", "error", err)
+		p.Send(utils.ViewStatusUpdateMsg{
+			Err:        fmt.Errorf("error calculating checksum of local Open Invoice Collector Database Schema: %w", err),
+			Completed:  true,
+			ShouldQuit: true,
+		})
+		return
+	}
+	p.Send(utils.ViewStatusUpdateMsg{
+		Message:   "Initializing recipe parser to read local Open Invoice Collector Database",
+		Completed: true,
+	})
+
+	p.Send(buchhalterMetricsRecord{
+		CliVersion: cliVersion,
+		// TODO Send ChromeVersion (not available in this scope)
+		// ChromeVersion: ChromeVersion,
+		VaultVersion: vaultProvider.Version,
+		OicdbVersion: recipeParser.OicdbVersion,
+	})
+
 	p.Send(utils.ViewStatusUpdateMsg{Message: "Building archive index"})
 	logger.Info("Building document archive index ...")
 
-	err := documentArchive.BuildArchiveIndex()
+	// Init document archive
+	documentArchive := archive.NewDocumentArchive(logger, config.buchhalterDocumentsDirectory)
+	err = documentArchive.BuildArchiveIndex()
 	if err != nil {
 		logger.Error("Error building document archive index", "error", err)
 		p.Send(utils.ViewStatusUpdateMsg{
@@ -195,7 +267,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, supplier, localOIC
 		}
 	}
 
-	statusUpdateMessage := "Loading recipes and credentials for suppliers"
+	statusUpdateMessage = "Loading recipes and credentials for suppliers"
 	if len(supplier) > 0 {
 		statusUpdateMessage = fmt.Sprintf("Loading recipe and credentials for supplier `%s`", supplier)
 	}
@@ -454,6 +526,8 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, supplier, localOIC
 		})
 	}
 
+	// TODO Move send metrics into main method
+	// Catch result, see https://github.com/charmbracelet/bubbletea/blob/main/examples/result/main.go
 	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")
 	if !developmentMode && alwaysSendMetrics {
 		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)
@@ -531,7 +605,7 @@ func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.P
 	return r, nil
 }
 
-func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, vaultVersion, oicdbVersion string) error {
+func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, cliVersion, ChromeVersion, vaultVersion, oicdbVersion string) error {
 	err := buchhalterAPIClient.SendMetrics(RunData, cliVersion, ChromeVersion, vaultVersion, oicdbVersion)
 	if err != nil {
 		return fmt.Errorf("error sending usage metrics to Buchhalter API: %w", err)
@@ -587,6 +661,7 @@ type viewModel struct {
 	selectionCursor  int
 	selectionChoice  string
 	selectionChoices []string
+	metricsRecord    *buchhalterMetricsRecord
 
 	// Buchhalter
 	vaultProvider       *vault.Provider1Password
@@ -641,7 +716,7 @@ type viewMsgModeUpdate struct {
 type tickMsg time.Time
 
 // initialModel returns the model for the bubbletea application.
-func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password, buchhalterAPIClient *repository.BuchhalterAPIClient, recipeParser *parser.RecipeParser) viewModel {
+func initialModel(logger *slog.Logger, buchhalterAPIClient *repository.BuchhalterAPIClient) viewModel {
 	const numLastResults = 5
 
 	s := spinner.New()
@@ -660,10 +735,9 @@ func initialModel(logger *slog.Logger, vaultProvider *vault.Provider1Password, b
 
 		// sendMetrics selection
 		selectionChoices: []string{"Yes", "No", "Always yes (don't ask again)"},
+		metricsRecord:    &buchhalterMetricsRecord{},
 
-		vaultProvider:       vaultProvider,
 		buchhalterAPIClient: buchhalterAPIClient,
-		recipeParser:        recipeParser,
 		logger:              logger,
 
 		// Browser
@@ -699,7 +773,8 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.selectionChoice {
 			case "Yes":
 				return m, func() tea.Msg {
-					err := sendMetrics(m.buchhalterAPIClient, false, m.vaultProvider.Version, m.recipeParser.OicdbVersion)
+					metrics := m.metricsRecord
+					err := sendMetrics(m.buchhalterAPIClient, false, metrics.CliVersion, metrics.ChromeVersion, metrics.VaultVersion, metrics.OicdbVersion)
 					return utils.ViewStatusUpdateMsg{
 						Message:    "Sent usage metrics to Buchhalter API",
 						Err:        err,
@@ -719,7 +794,8 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case "Always yes (don't ask again)":
 				return m, func() tea.Msg {
-					err := sendMetrics(m.buchhalterAPIClient, true, m.vaultProvider.Version, m.recipeParser.OicdbVersion)
+					metrics := m.metricsRecord
+					err := sendMetrics(m.buchhalterAPIClient, true, metrics.CliVersion, metrics.ChromeVersion, metrics.VaultVersion, metrics.OicdbVersion)
 					return utils.ViewStatusUpdateMsg{
 						Message:    "Sent usage metrics to Buchhalter API",
 						Err:        err,
@@ -771,6 +847,21 @@ func (m viewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		return m, nil
+
+	case buchhalterMetricsRecord:
+		if len(msg.CliVersion) > 0 {
+			m.metricsRecord.CliVersion = msg.CliVersion
+		}
+		if len(msg.ChromeVersion) > 0 {
+			m.metricsRecord.ChromeVersion = msg.ChromeVersion
+		}
+		if len(msg.OicdbVersion) > 0 {
+			m.metricsRecord.OicdbVersion = msg.OicdbVersion
+		}
+		if len(msg.VaultVersion) > 0 {
+			m.metricsRecord.VaultVersion = msg.VaultVersion
+		}
 		return m, nil
 
 	case updateBrowserContext:
@@ -844,7 +935,9 @@ func (m viewModel) View() string {
 		textStyle("Automatically sync all your incoming invoices from your suppliers. "),
 		textStyle("More information at: "),
 		textStyleBold("https://buchhalter.ai"),
-		textStyleGrayBold(fmt.Sprintf("Using OICDB %s and CLI %s", m.recipeParser.OicdbVersion, cliVersion)),
+		textStyleGrayBold(fmt.Sprintf("Using CLI %s", cliVersion)),
+		// TODO Outputting OICDB as task
+		//textStyleGrayBold(fmt.Sprintf("Using OICDB %s and CLI %s", m.recipeParser.OicdbVersion, cliVersion)),
 	) + "\n")
 
 	for _, actionCompleted := range m.actionsCompleted {
