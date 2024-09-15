@@ -667,9 +667,7 @@ type viewModelSync struct {
 	metricsRecord    *buchhalterMetricsRecord
 
 	// Buchhalter
-	vaultProvider       *vault.Provider1Password
 	buchhalterAPIClient *repository.BuchhalterAPIClient
-	recipeParser        *parser.RecipeParser
 	logger              *slog.Logger
 
 	// Browser
