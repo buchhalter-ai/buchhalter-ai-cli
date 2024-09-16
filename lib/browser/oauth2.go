@@ -174,8 +174,8 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 			if lastStepResult.Status == "success" {
 				result = utils.RecipeResult{
 					Status:              "success",
-					StatusText:          recipe.Supplier + ": " + newDocumentsText,
-					StatusTextFormatted: "- " + textStyleBold(recipe.Supplier) + ": " + newDocumentsText,
+					StatusText:          fmt.Sprintf("%s: %s", recipe.Supplier, newDocumentsText),
+					StatusTextFormatted: fmt.Sprintf("- %s: %s", textStyleBold(recipe.Supplier), newDocumentsText),
 					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Supplier, recipe.Version, n, step.Action),
 					LastStepDescription: step.Description,
 					NewFilesCount:       b.newFilesCount,
@@ -183,8 +183,8 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 			} else {
 				result = utils.RecipeResult{
 					Status:              "error",
-					StatusText:          recipe.Supplier + " aborted with error.",
-					StatusTextFormatted: "x " + textStyleBold(recipe.Supplier) + " aborted with error.",
+					StatusText:          fmt.Sprintf("%s aborted with error.", recipe.Supplier),
+					StatusTextFormatted: fmt.Sprintf("x %s aborted with error.", textStyleBold(recipe.Supplier)),
 					LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Supplier, recipe.Version, n, step.Action),
 					LastStepDescription: step.Description,
 					LastErrorMessage:    lastStepResult.Message,
@@ -198,11 +198,12 @@ func (b *ClientAuthBrowserDriver) RunRecipe(p *tea.Program, totalStepCount int, 
 		case <-time.After(b.recipeTimeout):
 			result = utils.RecipeResult{
 				Status:              "error",
-				StatusText:          recipe.Supplier + " aborted with timeout.",
-				StatusTextFormatted: "x " + textStyleBold(recipe.Supplier) + " aborted with timeout.",
+				StatusText:          fmt.Sprintf("%s aborted with timeout.", recipe.Supplier),
+				StatusTextFormatted: fmt.Sprintf("x %s aborted with timeout.", textStyleBold(recipe.Supplier)),
 				LastStepId:          fmt.Sprintf("%s-%s-%d-%s", recipe.Supplier, recipe.Version, n, step.Action),
 				LastStepDescription: step.Description,
-				NewFilesCount:       b.newFilesCount,
+				// LastErrorMessage is not set here, because we don't have an error message
+				NewFilesCount: b.newFilesCount,
 			}
 			return result, nil
 		}
