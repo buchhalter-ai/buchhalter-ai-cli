@@ -147,7 +147,6 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 
 	// Check if vault items are available
 	if len(vaultItems) == 0 {
-		// TODO Add link with help article
 		logger.Error("No credential items loaded from vault", "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfigBase, "tag", config.vaultConfigTag)
 		exitMessage := fmt.Sprintf("No credential items found in vault '%s' with tag '%s'. Please check your 1password vault items.", config.vaultConfigBase, config.vaultConfigTag)
 		p.Send(utils.ViewStatusUpdateMsg{
