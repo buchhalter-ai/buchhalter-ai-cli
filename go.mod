@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/Davincible/chromedp-undetected v1.3.8
-	github.com/charmbracelet/bubbles v0.19.0
+	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.1.1
 	github.com/charmbracelet/lipgloss v0.13.0
 	github.com/chromedp/cdproto v0.0.0-20240810084448-b931b754e476
