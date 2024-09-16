@@ -532,8 +532,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 		})
 	}
 
-	// TODO Move send metrics into main method
-	// Catch result, see https://github.com/charmbracelet/bubbletea/blob/main/examples/result/main.go
+	// Send metrics to Buchhalter API
 	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")
 	if !developmentMode && alwaysSendMetrics {
 		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)
