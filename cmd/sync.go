@@ -259,6 +259,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	recipesToExecute, err := loadRecipesAndMatchingVaultItems(logger, supplier, vaultProvider, recipeParser)
 	if err != nil {
 		// No error logging needed. This is done in `loadRecipesAndMatchingVaultItems`
+		// If an error occurs, this means the recipes could not be loaded.
 		p.Send(utils.ViewStatusUpdateMsg{
 			Err:        fmt.Errorf("error loading recipes: %w", err),
 			ShouldQuit: true,
@@ -275,9 +276,9 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 
 	// No pair of credentials found for supplier/recipes
 	if len(recipesToExecute) == 0 {
-		loggingErrorMessage := "No recipes found for suppliers"
+		loggingErrorMessage := "No matching pair of recipes <--> credentials found for suppliers"
 		if len(supplier) > 0 {
-			loggingErrorMessage = fmt.Sprintf("No recipe found for supplier `%s`", supplier)
+			loggingErrorMessage = fmt.Sprintf("No matching pair of recipes <--> credentials found for supplier `%s`", supplier)
 		}
 		logger.Error(loggingErrorMessage, "supplier", supplier, "error", err)
 		p.Send(utils.ViewStatusUpdateMsg{
@@ -568,8 +569,6 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 
 // loadRecipesAndMatchingVaultItems loads all recipes (or only the one for a specific supplier if `supplier` is set)
 // and tries to find matching pairs of credentials in the vault.
-//
-// TODO Distinguish between "no recipes found" and "no credentials found"
 func loadRecipesAndMatchingVaultItems(logger *slog.Logger, supplier string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) ([]recipeToExecute, error) {
 	var recipeVaultItemPairs []recipeToExecute
 
