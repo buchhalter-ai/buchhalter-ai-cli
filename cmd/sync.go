@@ -429,7 +429,9 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 		p.Send(newRecipeRunDataRecordMsg{record: runDataSupplierRecord})
 		recipeRunData = append(recipeRunData, runDataSupplierRecord)
 
-		// TODO Do we need viewMsgRecipeDownloadResultMsg ? We send the same data in newRecipeRunDataRecordMsg
+		// We send the recipeResult in a separate message to the view layer
+		// This could be optimized (and bundled together with newRecipeRunDataRecordMsg),
+		// but for now this is good enough.
 		p.Send(viewMsgRecipeDownloadResultMsg{
 			duration:      time.Since(startTime),
 			newFilesCount: recipeResult.NewFilesCount,
@@ -437,7 +439,12 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 			errorMessage:  recipeResult.LastErrorMessage,
 		})
 
-		logger.Info("Downloading invoices ... completed", "supplier", recipesToExecute[i].recipe.Supplier, "supplier_type", recipesToExecute[i].recipe.Type, "duration", time.Since(startTime), "new_files", recipeResult.NewFilesCount)
+		logger.Info("Downloading invoices ... completed",
+			"supplier", recipesToExecute[i].recipe.Supplier,
+			"supplier_type", recipesToExecute[i].recipe.Type,
+			"duration", time.Since(startTime),
+			"new_files", recipeResult.NewFilesCount,
+		)
 		invoiceLabel := "invoices"
 		if recipeResult.NewFilesCount == 1 {
 			invoiceLabel = "invoice"
