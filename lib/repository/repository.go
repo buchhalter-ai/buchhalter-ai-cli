@@ -240,6 +240,7 @@ func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVer
 
 	c.logger.Info("Sending metrics to Buchhalter SaaS",
 		"url", apiUrl,
+		"runData", metricsData.Data,
 		"cliVersion", metricsData.CliVersion,
 		"oicdbVersion", metricsData.OicdbVersion,
 		"vaultVersion", metricsData.VaultVersion,
