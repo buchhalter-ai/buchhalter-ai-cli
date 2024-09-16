@@ -42,7 +42,6 @@ type Metric struct {
 	OS            string `json:"os,omitempty"`
 }
 
-type RunData []RunDataSupplier
 type RunDataSupplier struct {
 	Supplier         string  `json:"supplier,omitempty"`
 	Version          string  `json:"version,omitempty"`
@@ -51,6 +50,8 @@ type RunDataSupplier struct {
 	Duration         float64 `json:"duration,omitempty"`
 	NewFilesCount    int     `json:"newFilesCount,omitempty"`
 }
+
+type RunData []RunDataSupplier
 
 type CliSyncResponse struct {
 	Status string            `json:"status"`
@@ -211,21 +212,21 @@ func (c *BuchhalterAPIClient) updateExists(currentChecksum, apiEndpoint string) 
 }
 
 func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVersion, vaultVersion, oicdbVersion string) error {
-	rdx, err := json.Marshal(runData)
+	runDataJSON, err := json.Marshal(runData)
 	if err != nil {
 		return fmt.Errorf("error marshalling run data: %w", err)
 	}
 
-	md := Metric{
+	metricsData := Metric{
 		MetricType:    "runMetrics",
-		Data:          string(rdx),
+		Data:          string(runDataJSON),
 		CliVersion:    cliVersion,
 		OicdbVersion:  oicdbVersion,
 		VaultVersion:  vaultVersion,
 		ChromeVersion: chromeVersion,
 		OS:            runtime.GOOS,
 	}
-	mdj, err := json.Marshal(md)
+	metricsDataJSON, err := json.Marshal(metricsData)
 	if err != nil {
 		return fmt.Errorf("error marshalling run data: %w", err)
 	}
@@ -239,13 +240,13 @@ func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVer
 
 	c.logger.Info("Sending metrics to Buchhalter SaaS",
 		"url", apiUrl,
-		"cliVersion", md.CliVersion,
-		"oicdbVersion", md.OicdbVersion,
-		"vaultVersion", md.VaultVersion,
-		"chromeVersion", md.ChromeVersion,
-		"os", md.OS,
+		"cliVersion", metricsData.CliVersion,
+		"oicdbVersion", metricsData.OicdbVersion,
+		"vaultVersion", metricsData.VaultVersion,
+		"chromeVersion", metricsData.ChromeVersion,
+		"os", metricsData.OS,
 	)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiUrl, bytes.NewBuffer(mdj))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiUrl, bytes.NewBuffer(metricsDataJSON))
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
