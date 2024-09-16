@@ -199,12 +199,6 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 		Completed: true,
 	})
 
-	p.Send(buchhalterMetricsRecord{
-		CliVersion:   cliVersion,
-		VaultVersion: vaultProvider.Version,
-		OicdbVersion: recipeParser.OicdbVersion,
-	})
-
 	p.Send(utils.ViewStatusUpdateMsg{Message: "Building archive index"})
 	logger.Info("Building document archive index ...")
 
@@ -280,6 +274,13 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 		return
 	}
 
+	// At this point in time, we have all the information we need to send metrics
+	p.Send(buchhalterMetricsRecord{
+		CliVersion:   cliVersion,
+		VaultVersion: vaultProvider.Version,
+		OicdbVersion: recipeParser.OicdbVersion,
+	})
+
 	// No pair of credentials found for supplier/recipes
 	if len(recipesToExecute) == 0 {
 		loggingErrorMessage := "No recipes found for suppliers"
@@ -293,6 +294,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 		})
 		return
 	}
+	statusUpdateMessage = fmt.Sprintf("%s (OICDB %s)", statusUpdateMessage, recipeParser.OicdbVersion)
 	p.Send(utils.ViewStatusUpdateMsg{
 		Message:   statusUpdateMessage,
 		Completed: true,
@@ -932,8 +934,6 @@ func (m viewModelSync) View() string {
 		textStyle("More information at: "),
 		textStyleBold("https://buchhalter.ai"),
 		textStyleGrayBold(fmt.Sprintf("Using CLI %s", cliVersion)),
-		// TODO Outputting OICDB as task
-		//textStyleGrayBold(fmt.Sprintf("Using OICDB %s and CLI %s", m.recipeParser.OicdbVersion, cliVersion)),
 	) + "\n")
 
 	for _, actionCompleted := range m.actionsCompleted {
