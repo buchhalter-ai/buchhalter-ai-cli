@@ -236,6 +236,15 @@ func (c *BuchhalterAPIClient) SendMetrics(runData RunData, cliVersion, chromeVer
 	if err != nil {
 		return err
 	}
+
+	c.logger.Info("Sending metrics to Buchhalter SaaS",
+		"url", apiUrl,
+		"cliVersion", md.CliVersion,
+		"oicdbVersion", md.OicdbVersion,
+		"vaultVersion", md.VaultVersion,
+		"chromeVersion", md.ChromeVersion,
+		"os", md.OS,
+	)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiUrl, bytes.NewBuffer(mdj))
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
