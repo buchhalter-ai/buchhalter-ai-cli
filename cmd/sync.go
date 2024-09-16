@@ -125,10 +125,9 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	p.Send(utils.ViewStatusUpdateMsg{Message: statusUpdateMessage})
 	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, config.vaultConfigBinary, config.vaultConfigBase, config.vaultConfigTag)
 	if err != nil {
-		logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
-		exitMessage := fmt.Sprintln(vaultProvider.GetHumanReadableErrorMessage(err))
+		logger.Error("error initializing credential provider 1Password: %s", "error", err)
 		p.Send(utils.ViewStatusUpdateMsg{
-			Err:        fmt.Errorf("error initializing credential provider 1Password: %s", exitMessage),
+			Err:        fmt.Errorf("error initializing credential provider 1Password: %s", vaultProvider.GetHumanReadableErrorMessage(err)),
 			Completed:  true,
 			ShouldQuit: true,
 		})
@@ -138,10 +137,9 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	// Load vault items/try to connect to vault
 	vaultItems, err := vaultProvider.LoadVaultItems()
 	if err != nil {
-		logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
-		exitMessage := fmt.Sprintln(vaultProvider.GetHumanReadableErrorMessage(err))
+		logger.Error("error initializing credential provider 1Password", "error", err)
 		p.Send(utils.ViewStatusUpdateMsg{
-			Err:        fmt.Errorf("error initializing credential provider 1Password: %s", exitMessage),
+			Err:        fmt.Errorf("error initializing credential provider 1Password: %s", vaultProvider.GetHumanReadableErrorMessage(err)),
 			Completed:  true,
 			ShouldQuit: true,
 		})
@@ -334,10 +332,9 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 		logger.Info("Requesting credentials from vault", "supplier", recipesToExecute[i].recipe.Supplier)
 		recipeCredentials, err := vaultProvider.GetCredentialsByItemId(recipesToExecute[i].vaultItemId)
 		if err != nil {
-			logger.Error(vaultProvider.GetHumanReadableErrorMessage(err))
-			// TODO Let `GetHumanReadableErrorMessage` return a proper error
+			logger.Error("error while requesting credentials from vault", "supplier", recipesToExecute[i].recipe.Supplier, "error", err)
 			p.Send(utils.ViewStatusUpdateMsg{
-				Err:       errors.New(vaultProvider.GetHumanReadableErrorMessage(err)),
+				Err:       vaultProvider.GetHumanReadableErrorMessage(err),
 				Completed: true,
 			})
 			continue
