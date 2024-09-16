@@ -57,6 +57,7 @@ type UIActionStyle string
 const (
 	UIActionStyleSuccess UIActionStyle = "success"
 	UIActionStyleError   UIActionStyle = "error"
+	UIActionStyleThanks  UIActionStyle = "thanks"
 )
 
 type UIAction struct {
