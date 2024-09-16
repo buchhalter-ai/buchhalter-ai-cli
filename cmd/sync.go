@@ -256,9 +256,9 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	p.Send(utils.ViewStatusUpdateMsg{
 		Message: statusUpdateMessage,
 	})
-	recipesToExecute, err := prepareRecipes(logger, supplier, vaultProvider, recipeParser)
+	recipesToExecute, err := loadRecipesAndMatchingVaultItems(logger, supplier, vaultProvider, recipeParser)
 	if err != nil {
-		// No error logging needed. This is done in `prepareRecipes`
+		// No error logging needed. This is done in `loadRecipesAndMatchingVaultItems`
 		p.Send(utils.ViewStatusUpdateMsg{
 			Err:        fmt.Errorf("error loading recipes: %w", err),
 			ShouldQuit: true,
@@ -566,29 +566,32 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	}
 }
 
+// loadRecipesAndMatchingVaultItems loads all recipes (or only the one for a specific supplier if `supplier` is set)
+// and tries to find matching pairs of credentials in the vault.
+//
 // TODO Distinguish between "no recipes found" and "no credentials found"
-// TODO Rename function to something more meaningful
-func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) ([]recipeToExecute, error) {
-	var r []recipeToExecute
+func loadRecipesAndMatchingVaultItems(logger *slog.Logger, supplier string, vaultProvider *vault.Provider1Password, recipeParser *parser.RecipeParser) ([]recipeToExecute, error) {
+	var recipeVaultItemPairs []recipeToExecute
 
+	// Load recipes
 	developmentMode := viper.GetBool("dev")
 	logger.Info("Loading recipes for suppliers ...", "development_mode", developmentMode)
 	loadRecipeResult, err := recipeParser.LoadRecipes(developmentMode)
 	if err != nil {
 		logger.Error("Error loading recipes for suppliers", "error", err, "load_recipe_result", loadRecipeResult)
-		return r, err
+		return recipeVaultItemPairs, err
 	}
 
-	// Run single supplier recipe
+	// Search for credential pairs matching the recipe(s)
 	stepCount := 0
 	vaultItems := vaultProvider.VaultItems
-	if supplier != "" {
+	if len(supplier) > 0 {
 		logger.Info("Search for credentials for suppliers recipe ...", "supplier", supplier)
 		for i := range vaultItems {
 			// Check if a recipe exists for the item
 			recipe := recipeParser.GetRecipeForItem(vaultItems[i], vaultProvider.UrlsByItemId)
 			if recipe != nil && supplier == recipe.Supplier {
-				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
+				recipeVaultItemPairs = append(recipeVaultItemPairs, recipeToExecute{recipe, vaultItems[i].ID})
 				logger.Info("Search for credentials for suppliers recipe ... found", "supplier", supplier, "credentials_id", vaultItems[i].ID)
 			}
 		}
@@ -602,13 +605,13 @@ func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.P
 			recipe := recipeParser.GetRecipeForItem(vaultItems[i], vaultProvider.UrlsByItemId)
 			if recipe != nil {
 				stepCount = stepCount + len(recipe.Steps)
-				r = append(r, recipeToExecute{recipe, vaultItems[i].ID})
+				recipeVaultItemPairs = append(recipeVaultItemPairs, recipeToExecute{recipe, vaultItems[i].ID})
 				logger.Info("Search for matching pairs of recipes for supplier recipes and credentials ... found", "supplier", recipe.Supplier, "credentials_id", vaultItems[i].ID)
 			}
 		}
 	}
 
-	return r, nil
+	return recipeVaultItemPairs, nil
 }
 
 func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, runData repository.RunData, cliVersion, chromeVersion, vaultVersion, oicdbVersion string) error {
