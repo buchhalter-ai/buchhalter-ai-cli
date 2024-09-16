@@ -44,7 +44,7 @@ func DetermineBinary(binaryPath string) (string, error) {
 			}
 		}
 
-		// TODO Check if fullBinaryPath is executable
+		// At this point in time, we assume that the binary is executable
 
 		return fullBinaryPath, nil
 	}
