@@ -82,7 +82,7 @@ type ViewModelVaultSelect struct {
 }
 
 type vaultSelectErrorMsg struct {
-	err string
+	err error
 }
 
 type vaultSelectInitSuccessMsg struct {
@@ -179,7 +179,7 @@ func (m ViewModelVaultSelect) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case vaultSelectErrorMsg:
-		m.actionError = msg.err
+		m.actionError = fmt.Sprintf("%s", msg.err)
 		return m, tea.Quit
 
 	case vaultSelectInitSuccessMsg:
