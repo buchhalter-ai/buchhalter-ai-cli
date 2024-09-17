@@ -366,7 +366,8 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 					Err:       fmt.Errorf("error running browser recipe for supplier `%s`: %w", recipesToExecute[i].recipe.Supplier, err),
 					Completed: true,
 				})
-				// We fall through, because recipeResult might be set and contains additional information
+				// We skip this supplier and continue with the next one
+				continue
 			}
 			chromeVersion = browserDriver.ChromeVersion
 
@@ -398,7 +399,8 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 					Err:       fmt.Errorf("error running browser recipe for supplier `%s`: %w", recipesToExecute[i].recipe.Supplier, err),
 					Completed: true,
 				})
-				// We fall through, because recipeResult might be set and contains additional information
+				// We skip this supplier and continue with the next one
+				continue
 			}
 			chromeVersion = clientDriver.ChromeVersion
 
@@ -411,8 +413,6 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 		if len(chromeVersion) > 0 {
 			p.Send(buchhalterMetricsRecord{ChromeVersion: chromeVersion})
 		}
-
-		// TODO recipeResult can be empty! (not nil, but without values)
 
 		runDataSupplierRecord := repository.RunDataSupplier{
 			// Recipe
