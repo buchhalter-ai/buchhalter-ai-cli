@@ -24,8 +24,6 @@ import (
 )
 
 var (
-	// TODO Remove global variable ChromeVersion
-	ChromeVersion string
 	// TODO Remove global variable RunData
 	RunData repository.RunData
 )
@@ -318,6 +316,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	totalStepCount := 0
 	stepCountInCurrentRecipe := 0
 	baseCountStep := 0
+	chromeVersion := ""
 	var recipeResult utils.RecipeResult
 	for i := range recipesToExecute {
 		totalStepCount += len(recipesToExecute[i].recipe.Steps)
@@ -374,9 +373,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 				})
 				// We fall through, because recipeResult might be set and contains additional information
 			}
-			if ChromeVersion == "" {
-				ChromeVersion = browserDriver.ChromeVersion
-			}
+			chromeVersion = browserDriver.ChromeVersion
 
 			// We don't need to call `chromedp.Cancel()` here.
 			// The browserDriver will be closed gracefully when the recipe is finished.
@@ -408,18 +405,16 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 				})
 				// We fall through, because recipeResult might be set and contains additional information
 			}
-			if ChromeVersion == "" {
-				ChromeVersion = clientDriver.ChromeVersion
-			}
+			chromeVersion = clientDriver.ChromeVersion
 
 			// We don't need to call `chromedp.Cancel()` here.
 			// The browserDriver will be closed gracefully when the recipe is finished.
 			// In case of an external abort signal (e.g. CTRL+C), bubbletea will call `chromedp.Cancel()`.
 		}
 
-		// Send ChromeVersion into metrics
-		if len(ChromeVersion) > 0 {
-			p.Send(buchhalterMetricsRecord{ChromeVersion: ChromeVersion})
+		// Send Chrome Version into metrics
+		if len(chromeVersion) > 0 {
+			p.Send(buchhalterMetricsRecord{ChromeVersion: chromeVersion})
 		}
 
 		// TODO recipeResult can be empty! (not nil, but without values)
@@ -535,7 +530,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	if !developmentMode && alwaysSendMetrics {
 		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)
 		p.Send(utils.ViewStatusUpdateMsg{Message: "Sending usage metrics to Buchhalter API"})
-		err = buchhalterAPIClient.SendMetrics(RunData, cliVersion, ChromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
+		err = buchhalterAPIClient.SendMetrics(RunData, cliVersion, chromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
 		if err != nil {
 			logger.Error("Error sending usage metrics to Buchhalter API", "error", err)
 			p.Send(utils.ViewStatusUpdateMsg{
