@@ -23,11 +23,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-var (
-	// TODO Remove global variable RunData
-	RunData repository.RunData
-)
-
 type recipeToExecute struct {
 	recipe      *parser.Recipe
 	vaultItemId string
@@ -317,7 +312,8 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	stepCountInCurrentRecipe := 0
 	baseCountStep := 0
 	chromeVersion := ""
-	var recipeResult utils.RecipeResult
+	recipeRunData := make(repository.RunData, 0)
+	recipeResult := utils.RecipeResult{}
 	for i := range recipesToExecute {
 		totalStepCount += len(recipesToExecute[i].recipe.Steps)
 	}
@@ -418,23 +414,37 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 
 		// TODO recipeResult can be empty! (not nil, but without values)
 
-		rdx := repository.RunDataSupplier{
-			Supplier:         recipesToExecute[i].recipe.Supplier,
-			Version:          recipesToExecute[i].recipe.Version,
+		runDataSupplierRecord := repository.RunDataSupplier{
+			// Recipe
+			Supplier: recipesToExecute[i].recipe.Supplier,
+			Version:  recipesToExecute[i].recipe.Version,
+
+			// Run result
 			Status:           recipeResult.StatusText,
 			LastErrorMessage: recipeResult.LastErrorMessage,
-			Duration:         time.Since(startTime).Seconds(),
 			NewFilesCount:    recipeResult.NewFilesCount,
+			Duration:         time.Since(startTime).Seconds(),
 		}
-		RunData = append(RunData, rdx)
 
+		p.Send(newRecipeRunDataRecordMsg{record: runDataSupplierRecord})
+		recipeRunData = append(recipeRunData, runDataSupplierRecord)
+
+		// We send the recipeResult in a separate message to the view layer
+		// This could be optimized (and bundled together with newRecipeRunDataRecordMsg),
+		// but for now this is good enough.
 		p.Send(viewMsgRecipeDownloadResultMsg{
 			duration:      time.Since(startTime),
 			newFilesCount: recipeResult.NewFilesCount,
 			step:          recipeResult.StatusTextFormatted,
 			errorMessage:  recipeResult.LastErrorMessage,
 		})
-		logger.Info("Downloading invoices ... completed", "supplier", recipesToExecute[i].recipe.Supplier, "supplier_type", recipesToExecute[i].recipe.Type, "duration", time.Since(startTime), "new_files", recipeResult.NewFilesCount)
+
+		logger.Info("Downloading invoices ... completed",
+			"supplier", recipesToExecute[i].recipe.Supplier,
+			"supplier_type", recipesToExecute[i].recipe.Type,
+			"duration", time.Since(startTime),
+			"new_files", recipeResult.NewFilesCount,
+		)
 		invoiceLabel := "invoices"
 		if recipeResult.NewFilesCount == 1 {
 			invoiceLabel = "invoice"
@@ -529,7 +539,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	if !developmentMode && alwaysSendMetrics {
 		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)
 		p.Send(utils.ViewStatusUpdateMsg{Message: "Sending usage metrics to Buchhalter API"})
-		err = buchhalterAPIClient.SendMetrics(RunData, cliVersion, chromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
+		err = buchhalterAPIClient.SendMetrics(recipeRunData, cliVersion, chromeVersion, vaultProvider.Version, recipeParser.OicdbVersion)
 		if err != nil {
 			logger.Error("Error sending usage metrics to Buchhalter API", "error", err)
 			p.Send(utils.ViewStatusUpdateMsg{
@@ -602,8 +612,8 @@ func prepareRecipes(logger *slog.Logger, supplier string, vaultProvider *vault.P
 	return r, nil
 }
 
-func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, cliVersion, chromeVersion, vaultVersion, oicdbVersion string) error {
-	err := buchhalterAPIClient.SendMetrics(RunData, cliVersion, chromeVersion, vaultVersion, oicdbVersion)
+func sendMetrics(buchhalterAPIClient *repository.BuchhalterAPIClient, a bool, runData repository.RunData, cliVersion, chromeVersion, vaultVersion, oicdbVersion string) error {
+	err := buchhalterAPIClient.SendMetrics(runData, cliVersion, chromeVersion, vaultVersion, oicdbVersion)
 	if err != nil {
 		return fmt.Errorf("error sending usage metrics to Buchhalter API: %w", err)
 	}
@@ -654,6 +664,9 @@ type viewModelSync struct {
 	quitting      bool
 	hasError      bool
 
+	// Recipe runs
+	recipeRunData repository.RunData
+
 	// sendMetrics selection
 	selectionCursor  int
 	selectionChoice  string
@@ -671,6 +684,10 @@ type viewModelSync struct {
 // updateBrowserContext is a message type to update the browser context in the bubbletea application.
 type updateBrowserContext struct {
 	ctx context.Context
+}
+
+type newRecipeRunDataRecordMsg struct {
+	record repository.RunDataSupplier
 }
 
 // viewQuitMsg initiates the shutdown sequence for the bubbletea application.
@@ -728,6 +745,9 @@ func initviewModelSync(logger *slog.Logger, buchhalterAPIClient *repository.Buch
 		results:      make([]viewMsgRecipeDownloadResultMsg, numLastResults),
 		hasError:     false,
 
+		// Recipe runs
+		recipeRunData: make(repository.RunData, 0),
+
 		// sendMetrics selection
 		selectionChoices: []string{"Yes", "No", "Always yes (don't ask again)"},
 		metricsRecord:    &buchhalterMetricsRecord{},
@@ -769,7 +789,7 @@ func (m viewModelSync) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "Yes":
 				return m, func() tea.Msg {
 					metrics := m.metricsRecord
-					err := sendMetrics(m.buchhalterAPIClient, false, metrics.CliVersion, metrics.ChromeVersion, metrics.VaultVersion, metrics.OicdbVersion)
+					err := sendMetrics(m.buchhalterAPIClient, false, m.recipeRunData, metrics.CliVersion, metrics.ChromeVersion, metrics.VaultVersion, metrics.OicdbVersion)
 					return utils.ViewStatusUpdateMsg{
 						Message:    "Sent usage metrics to Buchhalter API",
 						Err:        err,
@@ -790,7 +810,7 @@ func (m viewModelSync) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "Always yes (don't ask again)":
 				return m, func() tea.Msg {
 					metrics := m.metricsRecord
-					err := sendMetrics(m.buchhalterAPIClient, true, metrics.CliVersion, metrics.ChromeVersion, metrics.VaultVersion, metrics.OicdbVersion)
+					err := sendMetrics(m.buchhalterAPIClient, true, m.recipeRunData, metrics.CliVersion, metrics.ChromeVersion, metrics.VaultVersion, metrics.OicdbVersion)
 					return utils.ViewStatusUpdateMsg{
 						Message:    "Sent usage metrics to Buchhalter API",
 						Err:        err,
@@ -857,6 +877,10 @@ func (m viewModelSync) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.VaultVersion) > 0 {
 			m.metricsRecord.VaultVersion = msg.VaultVersion
 		}
+		return m, nil
+
+	case newRecipeRunDataRecordMsg:
+		m.recipeRunData = append(m.recipeRunData, msg.record)
 		return m, nil
 
 	case updateBrowserContext:
