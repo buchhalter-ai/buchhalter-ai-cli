@@ -147,7 +147,6 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 
 	// Check if vault items are available
 	if len(vaultItems) == 0 {
-		// TODO Add link with help article
 		logger.Error("No credential items loaded from vault", "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfigBase, "tag", config.vaultConfigTag)
 		exitMessage := fmt.Sprintf("No credential items found in vault '%s' with tag '%s'. Please check your 1password vault items.", config.vaultConfigBase, config.vaultConfigTag)
 		p.Send(utils.ViewStatusUpdateMsg{
@@ -533,8 +532,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 		})
 	}
 
-	// TODO Move send metrics into main method
-	// Catch result, see https://github.com/charmbracelet/bubbletea/blob/main/examples/result/main.go
+	// Send metrics to Buchhalter API
 	alwaysSendMetrics := viper.GetBool("buchhalter_always_send_metrics")
 	if !developmentMode && alwaysSendMetrics {
 		logger.Info("Sending usage metrics to Buchhalter API", "always_send_metrics", alwaysSendMetrics, "development_mode", developmentMode)

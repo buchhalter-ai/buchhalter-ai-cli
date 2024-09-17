@@ -134,9 +134,10 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		// TODO We should check if we really want to write the full config here
+		// Write the full config into the configuration file
 		// This was introduced to keep the value `buchhalter_always_send_metrics` persistent in the configuration file
 		// This can turn into problems later on, because we don't need all configuration values in the configuration file persistent
+		// Right now we don't have such a problem, hence we keep it as is.
 		err = viper.WriteConfigAs(configFile)
 		if err != nil {
 			fmt.Println("Error creating config file:", err)
