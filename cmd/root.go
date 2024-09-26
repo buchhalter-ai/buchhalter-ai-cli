@@ -56,7 +56,7 @@ var textStyle = lipgloss.NewStyle().Render
 var textStyleGrayBold = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#666666")).Render
 var textStyleBold = lipgloss.NewStyle().Bold(true).Render
 var headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#9FC131")).Render
-var checkMark = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
+var checkMark = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✅")
 var errorMark = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).SetString("❌")
 var thanksMark = lipgloss.NewStyle().SetString("🙏")
 
