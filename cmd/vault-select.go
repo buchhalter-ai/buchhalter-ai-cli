@@ -51,12 +51,29 @@ func RunVaultSelectCommand(cmd *cobra.Command, args []string) {
 	// Init UI
 	spinnerModel := spinner.New()
 	spinnerModel.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
+
+	credentialProviderVaults := []vaultConfiguration{}
+	if err := viper.UnmarshalKey("credential_provider_vaults", &credentialProviderVaults); err != nil {
+		exitMessage := fmt.Sprintf("Error reading configuration field `credential_provider_vaults`: %s", err)
+		exitWithLogo(exitMessage)
+	}
+	selectedVault := getSelectedVaultConfiguration(credentialProviderVaults)
+	selectedVaultName := ""
+	if selectedVault != nil {
+		selectedVaultName = selectedVault.Name
+	}
 	viewModel := ViewModelVaultSelect{
-		showSelection:    false,
-		selectionChoice:  viper.GetString("credential_provider_vault"),
+		// UI
 		actionsCompleted: []string{},
 		actionInProgress: "Initializing connection to Password Vault",
 		spinner:          spinnerModel,
+
+		// Vaults
+		vaults: credentialProviderVaults,
+
+		// Vault selection
+		showSelection:   false,
+		selectionChoice: selectedVaultName,
 	}
 
 	// Run the program
@@ -68,11 +85,44 @@ func RunVaultSelectCommand(cmd *cobra.Command, args []string) {
 	}
 }
 
+func getSelectedVaultConfiguration(entries []vaultConfiguration) *vaultConfiguration {
+	for _, entry := range entries {
+		if entry.Selected {
+			return &entry
+		}
+	}
+
+	return nil
+}
+
+func replaceVaultInVaultConfigListByName(entries []vaultConfiguration, newVault vaultConfiguration) []vaultConfiguration {
+	for i, entry := range entries {
+		if entry.Name == newVault.Name {
+			entries[i] = newVault
+			return entries
+		}
+	}
+
+	return append(entries, newVault)
+}
+
+func resetSelectedVaultInVaultConfigList(entries []vaultConfiguration) []vaultConfiguration {
+	for i := range entries {
+		entries[i].Selected = false
+	}
+
+	return entries
+}
+
 type ViewModelVaultSelect struct {
+	// UI
 	actionsCompleted []string
 	actionInProgress string
 	actionError      string
 	spinner          spinner.Model
+
+	// Vaults
+	vaults []vaultConfiguration
 
 	// Vault selection
 	showSelection    bool
@@ -139,7 +189,16 @@ func (m ViewModelVaultSelect) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			selectedVaultName := m.selectionChoices[m.selectionCursor].Name
 
 			return m, func() tea.Msg {
-				viper.Set("credential_provider_vault", m.selectionChoice)
+				vaultToWrite := vaultConfiguration{
+					ID:       m.selectionChoice,
+					Name:     selectedVaultName,
+					Selected: true,
+				}
+
+				vaultsToWriteList := resetSelectedVaultInVaultConfigList(m.vaults)
+				vaultsToWriteList = replaceVaultInVaultConfigListByName(vaultsToWriteList, vaultToWrite)
+
+				viper.Set("credential_provider_vaults", vaultsToWriteList)
 				configFile := viper.GetString("buchhalter_config_file")
 				err := viper.WriteConfigAs(configFile)
 				if err != nil {
@@ -217,7 +276,7 @@ func (m ViewModelVaultSelect) View() string {
 	}
 
 	if len(m.actionError) > 0 {
-		s.WriteString(errorkMark.Render() + " " + textStyleBold(m.actionError) + "\n")
+		s.WriteString(errorMark.Render() + " " + textStyleBold(capitalizeFirstLetter(m.actionError)) + "\n")
 	}
 
 	if m.showSelection {

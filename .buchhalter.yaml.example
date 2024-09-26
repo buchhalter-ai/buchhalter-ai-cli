@@ -1,3 +1,2 @@
 credential_provider_cli_command: "/usr/local/bin/op"
-credential_provider_vault: "Base"
 credential_provider_item_tag: "buchhalter-ai"
