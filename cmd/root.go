@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -56,8 +57,14 @@ var textStyleGrayBold = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color
 var textStyleBold = lipgloss.NewStyle().Bold(true).Render
 var headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#9FC131")).Render
 var checkMark = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
-var errorkMark = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).SetString("X")
+var errorMark = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).SetString("❌")
 var thanksMark = lipgloss.NewStyle().SetString("🙏")
+
+type vaultConfiguration struct {
+	ID       string `json:"id",mapstructure:"id"`
+	Name     string `json:"name",mapstructure:"name"`
+	Selected bool   `json:"selected",mapstructure:"selected"`
+}
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -110,6 +117,7 @@ func initConfig() {
 	// Documented settings
 	viper.SetDefault("credential_provider_cli_command", "")
 	viper.SetDefault("credential_provider_item_tag", "buchhalter-ai")
+	viper.SetDefault("credential_provider_vaults", []vaultConfiguration{})
 	viper.SetDefault("buchhalter_directory", buchhalterDir)
 	viper.SetDefault("buchhalter_config_directory", buchhalterConfigDir)
 	viper.SetDefault("buchhalter_config_file", configFile)
@@ -226,4 +234,14 @@ func exitWithLogo(message string) {
 	)
 	fmt.Println(s)
 	os.Exit(1)
+}
+
+func capitalizeFirstLetter(input string) string {
+	if len(input) == 0 {
+		return ""
+	}
+
+	first := strings.ToUpper(string(input[0]))
+	rest := input[1:]
+	return first + rest
 }

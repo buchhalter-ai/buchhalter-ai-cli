@@ -67,7 +67,6 @@ The following settings are available for configuration:
 | Setting                                     | Type   | Default                      | Description                                                                                                                                                                                                                                                                                                                       |
 |---------------------------------------------|--------|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `credential_provider_cli_command`           | String |                              | Path to the Password Manager CLI binary (e.g. `/usr/local/bin/op` for 1Password). If not configued, the binary will be automatically detected on the systems `$PATH`.                                                                                                                                                             |
-| `credential_provider_vault    `             | String | `Base`                       | Name of the vault inside your password manager buchhalter-cli will query. Only items inside this vault are considered. Useful to limit the scope. If empty, buchhalter-cli will query all accessible items based on your login. For 1Password, see [Create and share vaults](https://support.1password.com/create-share-vaults/). |
 | `credential_provider_item_tag`              | String | `buchhalter-ai`              | Name of the item tag buchhalter-cli will query. Only items with this particular tag are considered. Useful to limit the scope. If empty, buchhalter-cli will query all items in your vault. For 1Password, see [Organize with favorites and tags](https://support.1password.com/favorites-tags/)                                  |
 | `buchhalter_directory`                      | String | `~/buchhalter/`              | Directory to store the invoices from suppliers into.                                                                                                                                                                                                                                                                              |
 | `buchhalter_max_download_files_per_receipt` | Int    | `2`                          | Download only the latest 2 invoices per receipt and ignore the rest. `0` means all invoices.                                                                                                                                                                                                                                      |
@@ -81,7 +80,6 @@ An example looks like:
 
 ```yaml
 credential_provider_cli_command: "/opt/homebrew/bin/op"
-credential_provider_vault: "ACME Corp"
 credential_provider_item_tag: "invoice"
 buchhalter_always_send_metrics: True
 ```

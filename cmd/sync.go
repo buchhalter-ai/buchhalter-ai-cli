@@ -43,7 +43,7 @@ type syncCommandConfig struct {
 
 	// Vault
 	vaultConfigBinary string
-	vaultConfigBase   string
+	vaultConfig       vaultConfiguration
 	vaultConfigTag    string
 }
 
@@ -64,12 +64,22 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		supplier = cmdArgs[0]
 	}
 
+	credentialProviderVaults := []vaultConfiguration{}
+	if err := viper.UnmarshalKey("credential_provider_vaults", &credentialProviderVaults); err != nil {
+		exitMessage := fmt.Sprintf("Error reading configuration field `credential_provider_vaults`: %s", err)
+		exitWithLogo(exitMessage)
+	}
+	selectedVault := getSelectedVaultConfiguration(credentialProviderVaults)
+	if selectedVault == nil {
+		selectedVault = &vaultConfiguration{}
+	}
+
 	config := &syncCommandConfig{
 		buchhalterDirectory:          viper.GetString("buchhalter_directory"),
 		buchhalterConfigDirectory:    viper.GetString("buchhalter_config_directory"),
 		buchhalterDocumentsDirectory: viper.GetString("buchhalter_documents_directory"),
 		vaultConfigBinary:            viper.GetString("credential_provider_cli_command"),
-		vaultConfigBase:              viper.GetString("credential_provider_vault"),
+		vaultConfig:                  *selectedVault,
 		vaultConfigTag:               viper.GetString("credential_provider_item_tag"),
 	}
 
@@ -114,11 +124,23 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 }
 
 func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncCommandConfig, supplier string, buchhalterAPIClient *repository.BuchhalterAPIClient) {
+	// Checking if we have a vault configuration
+	// This can happen if the user has not selected a vault configuration yet or starts it for the first time
+	if len(config.vaultConfig.Name) == 0 || len(config.vaultConfig.ID) == 0 {
+		logger.Error("No vault configuration found")
+		p.Send(utils.ViewStatusUpdateMsg{
+			Err:        errors.New("no vault configuration found. Please run `buchhalter vault select` first."),
+			Completed:  true,
+			ShouldQuit: true,
+		})
+		return
+	}
+
 	// Init vault provider
-	logger.Info("Initializing credential provider", "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfigBase, "tag", config.vaultConfigTag)
-	statusUpdateMessage := fmt.Sprintf("Initializing credential provider 1Password with vault '%s' and tag '%s'", config.vaultConfigBase, config.vaultConfigTag)
+	logger.Info("Initializing credential provider", "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfig.Name, "tag", config.vaultConfigTag)
+	statusUpdateMessage := fmt.Sprintf("Initializing credential provider 1Password with vault '%s' and tag '%s'", config.vaultConfig.Name, config.vaultConfigTag)
 	p.Send(utils.ViewStatusUpdateMsg{Message: statusUpdateMessage})
-	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, config.vaultConfigBinary, config.vaultConfigBase, config.vaultConfigTag)
+	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, config.vaultConfigBinary, config.vaultConfig.Name, config.vaultConfigTag)
 	if err != nil {
 		logger.Error("error initializing credential provider 1Password: %s", "error", err)
 		p.Send(utils.ViewStatusUpdateMsg{
@@ -147,8 +169,8 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 
 	// Check if vault items are available
 	if len(vaultItems) == 0 {
-		logger.Error("No credential items loaded from vault", "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfigBase, "tag", config.vaultConfigTag)
-		exitMessage := fmt.Sprintf("No credential items found in vault '%s' with tag '%s'. Please check your 1password vault items.", config.vaultConfigBase, config.vaultConfigTag)
+		logger.Error("No credential items loaded from vault", "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfig.Name, "tag", config.vaultConfigTag)
+		exitMessage := fmt.Sprintf("No credential items found in vault '%s' with tag '%s'. Please check your 1password vault items.", config.vaultConfig.Name, config.vaultConfigTag)
 		p.Send(utils.ViewStatusUpdateMsg{
 			Err:        fmt.Errorf("error initializing credential provider 1Password: %s", exitMessage),
 			Completed:  true,
@@ -156,9 +178,9 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 		})
 		return
 	}
-	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfigBase, "tag", config.vaultConfigTag)
+	logger.Info("Credential items loaded from vault", "num_items", len(vaultItems), "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfig.Name, "tag", config.vaultConfigTag)
 	p.Send(utils.ViewStatusUpdateMsg{
-		Message:   fmt.Sprintf("Loaded %d credential items from vault '%s' with tag '%s'", len(vaultItems), config.vaultConfigBase, config.vaultConfigTag),
+		Message:   fmt.Sprintf("Loaded %d credential items from vault '%s' with tag '%s'", len(vaultItems), config.vaultConfig.Name, config.vaultConfigTag),
 		Completed: true,
 	})
 
@@ -962,7 +984,7 @@ func (m viewModelSync) View() string {
 		case utils.UIActionStyleSuccess:
 			s.WriteString(checkMark.Render() + " " + textStyleBold(actionCompleted.Message) + "\n")
 		case utils.UIActionStyleError:
-			s.WriteString(errorkMark.Render() + " " + errorStyle.Render(actionCompleted.Message) + "\n")
+			s.WriteString(errorMark.Render() + " " + errorStyle.Render(capitalizeFirstLetter(actionCompleted.Message)) + "\n")
 		case utils.UIActionStyleThanks:
 			s.WriteString(thanksMark.Render() + " " + textStyleBold(actionCompleted.Message) + "\n")
 		}
@@ -978,7 +1000,7 @@ func (m viewModelSync) View() string {
 	}
 
 	if len(m.actionError) > 0 {
-		s.WriteString(errorkMark.Render() + " " + errorStyle.Render(m.actionError) + "\n")
+		s.WriteString(errorMark.Render() + " " + errorStyle.Render(capitalizeFirstLetter(m.actionError)) + "\n")
 		if len(m.actionDetails) > 0 {
 			s.WriteString(helpStyle.Render("  " + m.actionDetails))
 		}
