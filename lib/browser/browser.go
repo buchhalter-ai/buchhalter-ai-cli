@@ -369,16 +369,24 @@ func (b *BrowserDriver) stepWaitFor(ctx context.Context, step parser.Step) utils
 
 func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector, "buchhalter_max_download_files_per_receipt", b.maxFilesDownloaded)
-
 	opts := []chromedp.QueryOption{}
 	opts = b.getSelectorTypeQueryOptions(step.SelectorType, opts)
-	var nodes []*cdp.Node
-	err := chromedp.Run(ctx, chromedp.Tasks{
-		chromedp.WaitReady(step.Selector, opts...),
-		chromedp.Nodes(step.Selector, &nodes),
-	})
+	var nodesCount int
+	err := chromedp.Run(ctx,
+		chromedp.WaitReady("document.querySelector('"+step.Selector+"')", opts...),
+		chromedp.Evaluate(fmt.Sprintf(`
+			var elements = document.querySelectorAll("%s");
+			console.log("buchhalter-ai-cli: Invoices found:", elements.length);
+			elements.length;
+		`, step.Selector), &nodesCount),
+	)
+
 	if err != nil {
-		return utils.StepResult{Status: "error", Message: err.Error()}
+		b.logger.Error("Failed to count invoice download nodes by selector", "action", step.Action, "selector", step.Selector, "error", err.Error())
+		return utils.StepResult{Status: "error", Message: "Failed to count invoice download nodes by selector. See error log for details."}
+	} else if nodesCount == 0 {
+		b.logger.Error("No elements found with the given selector", "selector", step.Selector)
+		return utils.StepResult{Status: "error", Message: "No elements found with the given selector. See error log for details."}
 	}
 
 	b.downloadedFilesCount = 0
@@ -406,23 +414,25 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 	})
 
 	// Click on download link (for client-side js stuff)
-	x := 0
 	sleepTime := 1500 * time.Millisecond
 	if step.SleepDuration > 0 {
 		sleepTime = time.Duration(step.SleepDuration) * time.Millisecond
 	}
-	for _, n := range nodes {
+
+	for x := 0; x < nodesCount; x++ {
+		combinedSelector := step.Selector + ":nth-child(" + strconv.Itoa(x+1) + ") > " + step.Value
+		b.logger.Debug("Executing recipe step ... trigger download click", "action", step.Action, "selector", combinedSelector, "loop", x, "max_files_downloaded", b.maxFilesDownloaded, "len(nodes)", nodesCount)
 		// Only download maxFilesDownloaded files
 		if b.maxFilesDownloaded > 0 && x >= b.maxFilesDownloaded {
 			b.logger.Debug("Breaking download loop, because max_files_downloaded is reached", "action", step.Action, "max_files_downloaded", b.maxFilesDownloaded, "loop", x)
 			break
 		}
 
-		b.logger.Debug("Executing recipe step ... trigger download click", "action", step.Action, "selector", n.FullXPath()+step.Value, "loop", x, "max_files_downloaded", b.maxFilesDownloaded, "len(nodes)", len(nodes))
 		wg.Add(1)
 		concurrentDownloadsPool <- struct{}{}
 		if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
-			chromedp.MouseClickNode(n),
+			chromedp.Evaluate(fmt.Sprintf("console.debug('buchhalter-ai-cli: Clicking element with selector: %s')", combinedSelector), nil),
+			chromedp.Click(combinedSelector, opts...),
 		}); err != nil {
 			// If we get an "Node does not have a layout object (-32000)" error here,
 			// this could mean that the node selector is not good enough.
@@ -435,9 +445,22 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 		}
 
 		if step.Value != "" {
-			if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
-				chromedp.WaitVisible(n.FullXPath() + step.Value),
-				chromedp.Click(n.FullXPath() + step.Value),
+			if err := chromedp.Run(ctx, chromedp.Tasks{
+				chromedp.Evaluate(fmt.Sprintf("console.debug('buchhalter-ai-cli: Clicking element with selector: %s')", combinedSelector), nil),
+				chromedp.Evaluate(fmt.Sprintf(`
+					const iconElement = document.querySelector('%s');
+					if (iconElement) {
+						var event = new MouseEvent('click', {
+							view: window,
+							bubbles: true,
+							cancelable: true
+						});
+						iconElement.dispatchEvent(event);
+						console.log('Click event dispatched on the icon.');
+					} else {
+						console.log('Icon element not found.');
+					}
+				`, combinedSelector), nil),
 			}); err != nil {
 				return utils.StepResult{Status: "error", Message: err.Error()}
 			}
