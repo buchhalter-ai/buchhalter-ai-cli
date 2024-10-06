@@ -14,8 +14,8 @@ import (
 var vaultSelectCmd = &cobra.Command{
 	Use:   "select",
 	Short: "Select the default 1Password vault that should be used with buchhalter-cli",
-	Long: `To use a 1Password vault inside buchhalter, you need to configure this.
-To know which vault should be used as the default vault, you can use this command to select a default vault.`,
+	Long: `Your secrets can be organized via vaults inside 1Password. buchhalter-cli is respecting these vaults to only retrieve items from a single vault. To know which vault should be used, the vault need to be selected.
+The chosen Vault name will be stores inside a local configuration for later use`,
 	Run: RunVaultSelectCommand,
 }
 
@@ -66,7 +66,7 @@ func RunVaultSelectCommand(cmd *cobra.Command, args []string) {
 	}
 }
 
-func replaceVaultByIDInVaultConfigList(entries []vaultConfiguration, newVault vaultConfiguration) []vaultConfiguration {
+func replaceOrAddVaultByIDInVaultConfigList(entries []vaultConfiguration, newVault vaultConfiguration) []vaultConfiguration {
 	for i, entry := range entries {
 		if entry.ID == newVault.ID {
 			entries[i] = newVault
@@ -138,7 +138,7 @@ func (m ViewModelVaultSelect) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				vaultsToWriteList := resetSelectedVaultInVaultConfigList(m.vaults)
-				vaultsToWriteList = replaceVaultByIDInVaultConfigList(vaultsToWriteList, vaultToWrite)
+				vaultsToWriteList = replaceOrAddVaultByIDInVaultConfigList(vaultsToWriteList, vaultToWrite)
 
 				viper.Set("credential_provider_vaults", vaultsToWriteList)
 				configFile := viper.GetString("buchhalter_config_file")
