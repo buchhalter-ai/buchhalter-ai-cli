@@ -280,6 +280,7 @@ func (m ViewModelVaultSelect) View() string {
 	}
 
 	if m.showSelection {
+		s.WriteString("\n")
 		for i := 0; i < len(m.selectionChoices); i++ {
 			currentConfigValue := ""
 			if m.selectionChoices[i].Name == m.selectionChoice || m.selectionChoices[i].ID == m.selectionChoice {
