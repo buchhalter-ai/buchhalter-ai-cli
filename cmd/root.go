@@ -61,9 +61,10 @@ var errorMark = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).SetString(
 var thanksMark = lipgloss.NewStyle().SetString("🙏")
 
 type vaultConfiguration struct {
-	ID       string `json:"id" mapstructure:"id"`
-	Name     string `json:"name" mapstructure:"name"`
-	Selected bool   `json:"selected" mapstructure:"selected"`
+	ID               string `json:"id" mapstructure:"id"`
+	Name             string `json:"name" mapstructure:"name"`
+	BuchhalterAPIKey string `json:"buchhalterAPIKey" mapstructure:"buchhalterAPIKey"`
+	Selected         bool   `json:"selected" mapstructure:"selected"`
 }
 
 // rootCmd represents the base command when called without any subcommands
