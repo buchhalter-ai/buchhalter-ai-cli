@@ -123,6 +123,16 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 	}
 }
 
+func getSelectedVaultConfiguration(entries []vaultConfiguration) *vaultConfiguration {
+	for _, entry := range entries {
+		if entry.Selected {
+			return &entry
+		}
+	}
+
+	return nil
+}
+
 func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncCommandConfig, supplier string, buchhalterAPIClient *repository.BuchhalterAPIClient) {
 	// Checking if we have a vault configuration
 	// This can happen if the user has not selected a vault configuration yet or starts it for the first time
