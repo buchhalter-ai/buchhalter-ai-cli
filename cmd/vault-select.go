@@ -114,6 +114,16 @@ func resetSelectedVaultInVaultConfigList(entries []vaultConfiguration) []vaultCo
 	return entries
 }
 
+func getVaultNameByVaultID(vaults []vault.Vault, vaultID string) string {
+	for _, vault := range vaults {
+		if vault.ID == vaultID {
+			return vault.Name
+		}
+	}
+
+	return ""
+}
+
 type ViewModelVaultSelect struct {
 	// UI
 	actionsCompleted []string
@@ -186,13 +196,16 @@ func (m ViewModelVaultSelect) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Send the choice on the channel and exit.
 			m.selectionChoice = m.selectionChoices[m.selectionCursor].ID
-			selectedVaultName := m.selectionChoices[m.selectionCursor].Name
 
 			return m, func() tea.Msg {
+				vaultID := m.selectionChoice
+				vaultName := getVaultNameByVaultID(m.selectionChoices, m.selectionChoice)
+
 				vaultToWrite := vaultConfiguration{
-					ID:       m.selectionChoice,
-					Name:     selectedVaultName,
-					Selected: true,
+					ID:               vaultID,
+					Name:             vaultName,
+					BuchhalterAPIKey: "",
+					Selected:         true,
 				}
 
 				vaultsToWriteList := resetSelectedVaultInVaultConfigList(m.vaults)
@@ -203,11 +216,11 @@ func (m ViewModelVaultSelect) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				err := viper.WriteConfigAs(configFile)
 				if err != nil {
 					return writeConfigFileMsg{
-						vaultName: selectedVaultName,
+						vaultName: vaultName,
 						err:       err,
 					}
 				}
-				return writeConfigFileMsg{vaultName: selectedVaultName}
+				return writeConfigFileMsg{vaultName: vaultName}
 			}
 
 		case "down", "j":
