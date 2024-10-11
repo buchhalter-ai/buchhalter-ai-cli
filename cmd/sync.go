@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -45,7 +46,17 @@ type syncCommandConfig struct {
 	vaultConfigBinary string
 	vaultConfig       vaultConfiguration
 	vaultConfigTag    string
+
+	// Vault Selection mode
+	vaultSelectionMode  int
+	vaultSelectionValue string
 }
+
+const (
+	VaultSelectionModeCliFlag = iota
+	VaultSelectionModeDefaultConfig
+	VaultSelectionNothingConfigured
+)
 
 var syncCmd = &cobra.Command{
 	Use:   "sync",
@@ -55,6 +66,13 @@ var syncCmd = &cobra.Command{
 }
 
 func init() {
+	syncCmd.Flags().StringP("vault", "v", "", "Vault to use for credentials")
+	err := viper.BindPFlag("cmd-arg-selected-vault", syncCmd.Flags().Lookup("vault"))
+	if err != nil {
+		fmt.Printf("Failed to bind 'vault' flag: %v\n", err)
+		os.Exit(1)
+	}
+
 	rootCmd.AddCommand(syncCmd)
 }
 
@@ -70,7 +88,31 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		exitMessage := fmt.Sprintf("Error reading configuration field `credential_provider_vaults`: %s", err)
 		exitWithLogo(exitMessage)
 	}
-	selectedVault := getSelectedVaultConfiguration(credentialProviderVaults)
+
+	// We have two options to get the right vault configuration:
+	// 1. The user has selected a vault configuration via the CLI flag
+	// 2. We try to get the (default) selected vault configuration from the configuration file
+	//
+	// The CLI flag has precedence over the configuration file.
+	var vaultSelectionMode int
+	var vaultSelectionValue string
+	var selectedVault *vaultConfiguration
+	cmdArgSelectedVault := viper.GetString("cmd-arg-selected-vault")
+	cmdArgSelectedVault = strings.TrimSpace(cmdArgSelectedVault)
+	if len(cmdArgSelectedVault) > 0 {
+		vaultSelectionMode = VaultSelectionModeCliFlag
+		vaultSelectionValue = cmdArgSelectedVault
+		selectedVault = getVaultFromVaultListByVaultName(credentialProviderVaults, cmdArgSelectedVault)
+	} else {
+		vaultSelectionMode = VaultSelectionModeDefaultConfig
+		selectedVault = getSelectedVaultConfiguration(credentialProviderVaults)
+	}
+
+	// Check if we don't have any vault configurations
+	if len(credentialProviderVaults) == 0 {
+		vaultSelectionMode = VaultSelectionNothingConfigured
+	}
+
 	if selectedVault == nil {
 		selectedVault = &vaultConfiguration{}
 	}
@@ -82,6 +124,10 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		vaultConfigBinary:            viper.GetString("credential_provider_cli_command"),
 		vaultConfig:                  *selectedVault,
 		vaultConfigTag:               viper.GetString("credential_provider_item_tag"),
+
+		// Vault Selection mode
+		vaultSelectionMode:  vaultSelectionMode,
+		vaultSelectionValue: vaultSelectionValue,
 	}
 
 	// Init logging
@@ -134,13 +180,33 @@ func getSelectedVaultConfiguration(entries []vaultConfiguration) *vaultConfigura
 	return nil
 }
 
+func getVaultFromVaultListByVaultName(vaults []vaultConfiguration, vaultName string) *vaultConfiguration {
+	lowerName := strings.ToLower(vaultName)
+	for _, vault := range vaults {
+		if strings.ToLower(vault.Name) == lowerName {
+			return &vault
+		}
+	}
+
+	return nil
+}
+
 func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncCommandConfig, supplier string, buchhalterAPIClient *repository.BuchhalterAPIClient) {
 	// Checking if we have a vault configuration
 	// This can happen if the user has not selected a vault configuration yet or starts it for the first time
 	if len(config.vaultConfig.Name) == 0 || len(config.vaultConfig.ID) == 0 {
-		logger.Error("No vault configuration found")
+		errorMessage := ""
+		switch config.vaultSelectionMode {
+		case VaultSelectionModeCliFlag:
+			errorMessage = fmt.Sprintf("no default vault configuration found based on your input `%s`. Please run `buchhalter vault list` to see all configured vaults.", config.vaultSelectionValue)
+		case VaultSelectionModeDefaultConfig:
+			errorMessage = "no default vault configuration found. Please run `buchhalter vault select` first to select one 1Password vault as default."
+		case VaultSelectionNothingConfigured:
+			errorMessage = "no vault configuration found. Please run `buchhalter vault add` to add a new 1Password vault to buchhalter-cli."
+		}
+		logger.Error("No vault configuration found", "vault_selection_mode", config.vaultSelectionMode, "vault_selection_value", config.vaultSelectionValue)
 		p.Send(utils.ViewStatusUpdateMsg{
-			Err:        errors.New("no vault configuration found. Please run `buchhalter vault add` or `buchhalter vault select` first to add a new vault to buchhalter or select one as default."),
+			Err:        errors.New(errorMessage),
 			Completed:  true,
 			ShouldQuit: true,
 		})
