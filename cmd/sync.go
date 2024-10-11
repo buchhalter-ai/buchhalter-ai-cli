@@ -64,6 +64,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		supplier = cmdArgs[0]
 	}
 
+	// Init vaults from configuration
 	credentialProviderVaults := []vaultConfiguration{}
 	if err := viper.UnmarshalKey("credential_provider_vaults", &credentialProviderVaults); err != nil {
 		exitMessage := fmt.Sprintf("Error reading configuration field `credential_provider_vaults`: %s", err)
@@ -139,7 +140,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	if len(config.vaultConfig.Name) == 0 || len(config.vaultConfig.ID) == 0 {
 		logger.Error("No vault configuration found")
 		p.Send(utils.ViewStatusUpdateMsg{
-			Err:        errors.New("no vault configuration found. Please run `buchhalter vault select` first."),
+			Err:        errors.New("no vault configuration found. Please run `buchhalter vault add` or `buchhalter vault select` first to add a new vault to buchhalter or select one as default."),
 			Completed:  true,
 			ShouldQuit: true,
 		})

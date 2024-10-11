@@ -38,7 +38,7 @@ func RunVaultListCommand(cmd *cobra.Command, args []string) {
 	logger.Info("Booting up", "development_mode", developmentMode)
 	defer logger.Info("Shutting down")
 
-	// Get vaults from configuration
+	// Init vaults from configuration
 	credentialProviderVaults := []vaultConfiguration{}
 	if err := viper.UnmarshalKey("credential_provider_vaults", &credentialProviderVaults); err != nil {
 		exitMessage := fmt.Sprintf("Error reading configuration field `credential_provider_vaults`: %s", err)
