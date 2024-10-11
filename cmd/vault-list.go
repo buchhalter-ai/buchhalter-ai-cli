@@ -57,7 +57,7 @@ func renderConfiguredVaults(vaults []vaultConfiguration) string {
 		s.WriteString("\nConfigured 1Password vaults for buchhalter.ai:\n\n")
 		for _, vault := range vaults {
 			// API Key or not?
-			emojy := errorMark.Render()
+			emojy := inactiveMark.Render()
 			if len(vault.BuchhalterAPIKey) > 0 {
 				emojy = checkMark.Render()
 			}
@@ -73,7 +73,7 @@ func renderConfiguredVaults(vaults []vaultConfiguration) string {
 		s.WriteString("\n")
 		s.WriteString("Legend:\n")
 		s.WriteString(fmt.Sprintf("%s Vault has a configured buchhalter SaaS API Key\n", checkMark.Render()))
-		s.WriteString(fmt.Sprintf("%s Vault has no configured buchhalter SaaS API Key\n", errorMark.Render()))
+		s.WriteString(fmt.Sprintf("%s Vault has no configured buchhalter SaaS API Key\n", inactiveMark.Render()))
 
 		s.WriteString("\n")
 		s.WriteString("Want to reconfigure your buchhalter vaults?\n")
