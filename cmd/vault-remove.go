@@ -10,20 +10,20 @@ import (
 	"github.com/spf13/viper"
 )
 
-// vaultSelectCmd represents the `vault select` command
-var vaultSelectCmd = &cobra.Command{
-	Use:   "select",
-	Short: "Select the default 1Password vault that should be used with buchhalter-cli",
-	Long: `Your secrets can be organized via vaults inside 1Password. buchhalter-cli is respecting these vaults to only retrieve items from a single vault. To know which vault should be used, the vault need to be selected.
-The chosen Vault name will be stores inside a local configuration for later use`,
-	Run: RunVaultSelectCommand,
+// vaultRemoveCmd represents the `vault remove` command
+var vaultRemoveCmd = &cobra.Command{
+	Use:   "remove",
+	Short: "Remove a 1Password vault from the buchhalter-cli configuration",
+	Long: `To use a 1Password vault inside buchhalter, you need to configure this.
+This command provides you the tooling to remove a configured vault from buchhalter configuration.`,
+	Run: RunVaultRemoveCommand,
 }
 
 func init() {
-	vaultCmd.AddCommand(vaultSelectCmd)
+	vaultCmd.AddCommand(vaultRemoveCmd)
 }
 
-func RunVaultSelectCommand(cmd *cobra.Command, args []string) {
+func RunVaultRemoveCommand(cmd *cobra.Command, args []string) {
 	// Init logging
 	buchhalterDirectory := viper.GetString("buchhalter_directory")
 	developmentMode := viper.GetBool("dev")
@@ -47,7 +47,7 @@ func RunVaultSelectCommand(cmd *cobra.Command, args []string) {
 		exitWithLogo(exitMessage)
 	}
 
-	viewModel := ViewModelVaultSelect{
+	viewModel := ViewModelVaultRemove{
 		// UI
 		actionsCompleted: []string{},
 
@@ -67,26 +67,7 @@ func RunVaultSelectCommand(cmd *cobra.Command, args []string) {
 	}
 }
 
-func replaceOrAddVaultByIDInVaultConfigList(entries []vaultConfiguration, newVault vaultConfiguration) []vaultConfiguration {
-	for i, entry := range entries {
-		if entry.ID == newVault.ID {
-			entries[i] = newVault
-			return entries
-		}
-	}
-
-	return append(entries, newVault)
-}
-
-func resetSelectedVaultInVaultConfigList(entries []vaultConfiguration) []vaultConfiguration {
-	for i := range entries {
-		entries[i].Selected = false
-	}
-
-	return entries
-}
-
-type ViewModelVaultSelect struct {
+type ViewModelVaultRemove struct {
 	// UI
 	actionsCompleted []string
 	actionError      string
@@ -99,16 +80,21 @@ type ViewModelVaultSelect struct {
 	selectionCursor int
 }
 
-type writeConfigFileMsg struct {
-	vaultName string
-	err       error
+func removeVaultFromListByVaultID(vaults []vaultConfiguration, vaultID string) []vaultConfiguration {
+	var newVaults []vaultConfiguration
+	for _, vault := range vaults {
+		if vault.ID != vaultID {
+			newVaults = append(newVaults, vault)
+		}
+	}
+	return newVaults
 }
 
-func (m ViewModelVaultSelect) Init() tea.Cmd {
+func (m ViewModelVaultRemove) Init() tea.Cmd {
 	return nil
 }
 
-func (m ViewModelVaultSelect) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m ViewModelVaultRemove) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -125,22 +111,13 @@ func (m ViewModelVaultSelect) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Deactivate selection
 			m.showSelection = false
-			m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("Selected vault `%s` to mark as new default in buchhalter-cli configuration", selectedVaultName))
+			m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("Selected vault `%s` remove from buchhalter-cli configuration", selectedVaultName))
 
 			return m, func() tea.Msg {
 				vaultID := m.vaults[m.selectionCursor].ID
 				vaultName := m.vaults[m.selectionCursor].Name
 
-				vaultToWrite := vaultConfiguration{
-					ID:               vaultID,
-					Name:             vaultName,
-					BuchhalterAPIKey: m.vaults[m.selectionCursor].BuchhalterAPIKey,
-					Selected:         true,
-				}
-
-				vaultsToWriteList := resetSelectedVaultInVaultConfigList(m.vaults)
-				vaultsToWriteList = replaceOrAddVaultByIDInVaultConfigList(vaultsToWriteList, vaultToWrite)
-
+				vaultsToWriteList := removeVaultFromListByVaultID(m.vaults, vaultID)
 				viper.Set("credential_provider_vaults", vaultsToWriteList)
 				configFile := viper.GetString("buchhalter_config_file")
 				err := viper.WriteConfigAs(configFile)
@@ -182,7 +159,7 @@ func (m ViewModelVaultSelect) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("Configured 1Password vault '%s' as new default in buchhalter-cli configuration", msg.vaultName))
+		m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("Removed vault `%s` from buchhalter-cli configuration", msg.vaultName))
 		return m, tea.Quit
 	}
 
@@ -198,7 +175,7 @@ func (m ViewModelVaultSelect) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m ViewModelVaultSelect) View() string {
+func (m ViewModelVaultRemove) View() string {
 	s := strings.Builder{}
 	s.WriteString(headerStyle(LogoText) + "\n\n")
 
@@ -212,7 +189,7 @@ func (m ViewModelVaultSelect) View() string {
 
 	if m.showSelection && len(m.vaults) > 0 {
 		s.WriteString("The following vaults have been found in the buchhalter.ai configuration.\n")
-		s.WriteString("Select the one you want to select as a new default vault and press ENTER:\n\n")
+		s.WriteString("Select the one you want to remove and press ENTER:\n\n")
 
 		for i := 0; i < len(m.vaults); i++ {
 			currentConfigValue := ""
