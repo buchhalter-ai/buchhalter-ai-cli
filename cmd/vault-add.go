@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -11,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"buchhalter/lib/repository"
 	"buchhalter/lib/vault"
 )
 
@@ -86,6 +88,9 @@ func RunVaultAddCommand(cmd *cobra.Command, args []string) {
 		showAPIKeyInput: false,
 		apiKeyTextInput: apiKeyTextInput,
 		apiKey:          "",
+
+		// Cmd
+		logger: logger,
 	}
 
 	// Run the program
@@ -127,6 +132,9 @@ type ViewModelVaultAdd struct {
 	showAPIKeyInput bool
 	apiKeyTextInput textinput.Model
 	apiKey          string
+
+	// Cmd
+	logger *slog.Logger
 }
 
 type vaultSelectErrorMsg struct {
@@ -135,6 +143,14 @@ type vaultSelectErrorMsg struct {
 
 type vaultSelectInitSuccessMsg struct {
 	vaults []vault.Vault
+}
+
+type verifySaaSAPIKeyResultMsg struct {
+	success bool
+	message string
+}
+
+type triggerConfigurationWriteMsg struct {
 }
 
 func vaultSelectInitCmd() tea.Msg {
@@ -205,8 +221,15 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					apiKey = maskString(apiKey)
 					m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("buchhalter SaaS API Key %s received", apiKey))
 
-					// TODO: Validate API key
-					// m.actionInProgress = "Validating buchhalter SaaS API Key"
+					m.actionInProgress = "Validating buchhalter SaaS API Key ..."
+					return m, func() tea.Msg {
+						// Validating API key
+						verifyResult, verifyMessage := verifyBuchhalterAPIKey(m.logger, m.apiKey)
+						return verifySaaSAPIKeyResultMsg{
+							success: verifyResult,
+							message: verifyMessage,
+						}
+					}
 				case len(apiKey) == 0:
 					m.actionsCompleted = append(m.actionsCompleted, "Skipping. No buchhalter SaaS API Key added to buchhalter-cli configuration")
 				default:
@@ -215,41 +238,7 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			return m, func() tea.Msg {
-				vaultID := m.selectionChoices[m.selectionCursor].ID
-				vaultName := m.selectionChoices[m.selectionCursor].Name
-
-				// Prefill existing API key and selected value if vault exists in configuration already
-				existingSelectedValue := false
-				existingVault := getVaultFromVaultListByVaultID(m.vaults, vaultID)
-				if existingVault != nil {
-					existingSelectedValue = existingVault.Selected
-				}
-
-				// If the API key is not 64 characters long, we invalidate it
-				configAPIKey := m.apiKey
-				if len(configAPIKey) != 64 {
-					configAPIKey = ""
-				}
-
-				// Craft new vault configuration
-				vaultToWrite := vaultConfiguration{
-					ID:               vaultID,
-					Name:             vaultName,
-					BuchhalterAPIKey: configAPIKey,
-					Selected:         existingSelectedValue,
-				}
-				vaultsToWriteList := replaceOrAddVaultByIDInVaultConfigList(m.vaults, vaultToWrite)
-
-				viper.Set("credential_provider_vaults", vaultsToWriteList)
-				configFile := viper.GetString("buchhalter_config_file")
-				err := viper.WriteConfigAs(configFile)
-				if err != nil {
-					return writeConfigFileMsg{
-						vaultName: vaultName,
-						err:       err,
-					}
-				}
-				return writeConfigFileMsg{vaultName: vaultName}
+				return triggerConfigurationWriteMsg{}
 			}
 
 		case "down", "j":
@@ -298,6 +287,60 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Show Vault selection
 		m.actionInProgress = "Select the 1Password vault that should be used with buchhalter-cli"
 		m.showSelection = true
+
+	case verifySaaSAPIKeyResultMsg:
+		m.actionInProgress = ""
+		if !msg.success {
+			m.actionError = msg.message
+
+			// Resetting API Key
+			m.apiKey = ""
+		} else {
+			m.actionsCompleted = append(m.actionsCompleted, msg.message)
+		}
+
+		return m, func() tea.Msg {
+			return triggerConfigurationWriteMsg{}
+		}
+
+	case triggerConfigurationWriteMsg:
+		return m, func() tea.Msg {
+			vaultID := m.selectionChoices[m.selectionCursor].ID
+			vaultName := m.selectionChoices[m.selectionCursor].Name
+
+			// Prefill existing API key and selected value if vault exists in configuration already
+			existingSelectedValue := false
+			existingVault := getVaultFromVaultListByVaultID(m.vaults, vaultID)
+			if existingVault != nil {
+				existingSelectedValue = existingVault.Selected
+			}
+
+			// If the API key is not 64 characters long, we invalidate it
+			configAPIKey := m.apiKey
+			if len(configAPIKey) != 64 {
+				configAPIKey = ""
+			}
+
+			// Craft new vault configuration
+			vaultToWrite := vaultConfiguration{
+				ID:               vaultID,
+				Name:             vaultName,
+				BuchhalterAPIKey: configAPIKey,
+				Selected:         existingSelectedValue,
+			}
+			vaultsToWriteList := replaceOrAddVaultByIDInVaultConfigList(m.vaults, vaultToWrite)
+
+			viper.Set("credential_provider_vaults", vaultsToWriteList)
+			configFile := viper.GetString("buchhalter_config_file")
+			err := viper.WriteConfigAs(configFile)
+			if err != nil {
+				return writeConfigFileMsg{
+					vaultName: vaultName,
+					err:       err,
+				}
+			}
+			return writeConfigFileMsg{vaultName: vaultName}
+		}
 
 	case writeConfigFileMsg:
 		if msg.err != nil {
@@ -380,4 +423,25 @@ func maskString(input string) string {
 
 	masked := strings.Repeat("*", len(input)-6)
 	return start + masked + end
+}
+
+func verifyBuchhalterAPIKey(logger *slog.Logger, apiKey string) (bool, string) {
+	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
+	apiHost := viper.GetString("buchhalter_api_host")
+	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiKey, cliVersion)
+	if err != nil {
+		return false, "Error initializing API client"
+	}
+
+	logger.Info("Making API call")
+	cliSyncResponse, err := buchhalterAPIClient.GetAuthenticatedUser()
+	if err != nil {
+		return false, "API call not successful, response could not be read"
+	}
+
+	if cliSyncResponse == nil {
+		return false, "API Key is not valid"
+	}
+
+	return true, "API Key is valid"
 }
