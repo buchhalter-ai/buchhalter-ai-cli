@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/viper"
 
 	"buchhalter/lib/repository"
+	"buchhalter/lib/utils"
 	"buchhalter/lib/vault"
 )
 
@@ -73,7 +74,7 @@ func RunVaultAddCommand(cmd *cobra.Command, args []string) {
 
 	viewModel := ViewModelVaultAdd{
 		// UI
-		actionsCompleted: []string{},
+		actionsCompleted: []utils.UIAction{},
 		actionInProgress: "Initializing connection to Password Vault",
 		spinner:          spinnerModel,
 
@@ -114,9 +115,8 @@ func getVaultFromVaultListByVaultID(vaults []vaultConfiguration, vaultID string)
 
 type ViewModelVaultAdd struct {
 	// UI
-	actionsCompleted []string
+	actionsCompleted []utils.UIAction
 	actionInProgress string
-	actionError      string
 	spinner          spinner.Model
 
 	// Vaults
@@ -195,7 +195,10 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Deactivate selection
 				m.showSelection = false
 				m.actionInProgress = ""
-				m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("Selected the 1Password vault %s to be added to buchhalter-cli configuration", selectedVaultName))
+				m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+					Message: fmt.Sprintf("Selected the 1Password vault %s to be added to buchhalter-cli configuration", selectedVaultName),
+					Style:   utils.UIActionStyleSuccess,
+				})
 
 				// Show API key input
 				m.showAPIKeyInput = true
@@ -219,7 +222,10 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.apiKey = apiKey
 
 					apiKey = maskString(apiKey)
-					m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("buchhalter SaaS API Key %s received", apiKey))
+					m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+						Message: fmt.Sprintf("buchhalter SaaS API Key %s received", apiKey),
+						Style:   utils.UIActionStyleSuccess,
+					})
 
 					m.actionInProgress = "Validating buchhalter SaaS API Key ..."
 					return m, func() tea.Msg {
@@ -231,9 +237,15 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				case len(apiKey) == 0:
-					m.actionsCompleted = append(m.actionsCompleted, "Skipping. No buchhalter SaaS API Key added to buchhalter-cli configuration")
+					m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+						Message: "Skipping. No buchhalter SaaS API Key added to buchhalter-cli configuration",
+						Style:   utils.UIActionStyleSuccess,
+					})
 				default:
-					m.actionError = fmt.Sprintf("Skipping. buchhalter SaaS API Key has not the correct length (%d chars, expected a 64 char key)", len(apiKey))
+					m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+						Message: fmt.Sprintf("Skipping. buchhalter SaaS API Key has not the correct length (%d chars, expected a 64 char key)", len(apiKey)),
+						Style:   utils.UIActionStyleError,
+					})
 				}
 			}
 
@@ -269,7 +281,10 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case vaultSelectErrorMsg:
-		m.actionError = fmt.Sprintf("%s", msg.err)
+		m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+			Message: fmt.Sprintf("%s", msg.err),
+			Style:   utils.UIActionStyleError,
+		})
 		return m, tea.Quit
 
 	case vaultSelectInitSuccessMsg:
@@ -278,11 +293,17 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// No vaults found in 1Password
 		if len(msg.vaults) == 0 {
-			m.actionError = "No vaults found in 1Password"
+			m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+				Message: "No vaults found in 1Password",
+				Style:   utils.UIActionStyleError,
+			})
 			return m, tea.Quit
 		}
 
-		m.actionsCompleted = append(m.actionsCompleted, "Initializing connection to Password Vault")
+		m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+			Message: "Initializing connection to Password Vault",
+			Style:   utils.UIActionStyleSuccess,
+		})
 
 		// Show Vault selection
 		m.actionInProgress = "Select the 1Password vault that should be used with buchhalter-cli"
@@ -291,12 +312,18 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case verifySaaSAPIKeyResultMsg:
 		m.actionInProgress = ""
 		if !msg.success {
-			m.actionError = msg.message
+			m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+				Message: msg.message,
+				Style:   utils.UIActionStyleError,
+			})
 
 			// Resetting API Key
 			m.apiKey = ""
 		} else {
-			m.actionsCompleted = append(m.actionsCompleted, msg.message)
+			m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+				Message: msg.message,
+				Style:   utils.UIActionStyleSuccess,
+			})
 		}
 
 		return m, func() tea.Msg {
@@ -344,11 +371,17 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case writeConfigFileMsg:
 		if msg.err != nil {
-			m.actionError = fmt.Sprintf("Error writing config file: %s", msg.err)
+			m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+				Message: fmt.Sprintf("Error writing config file: %s", msg.err),
+				Style:   utils.UIActionStyleError,
+			})
 			return m, tea.Quit
 		}
 
-		m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("Added 1Password vault '%s' to buchhalter configuration", msg.vaultName))
+		m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+			Message: fmt.Sprintf("Added 1Password vault '%s' to buchhalter configuration", msg.vaultName),
+			Style:   utils.UIActionStyleSuccess,
+		})
 		return m, tea.Quit
 	}
 
@@ -366,15 +399,16 @@ func (m ViewModelVaultAdd) View() string {
 	s.WriteString(headerStyle(LogoText) + "\n\n")
 
 	for _, actionCompleted := range m.actionsCompleted {
-		s.WriteString(checkMark.Render() + " " + textStyleBold(actionCompleted) + "\n")
+		switch actionCompleted.Style {
+		case utils.UIActionStyleSuccess:
+			s.WriteString(checkMark.Render() + " " + textStyleBold(actionCompleted.Message) + "\n")
+		case utils.UIActionStyleError:
+			s.WriteString(errorMark.Render() + " " + errorStyle.Render(capitalizeFirstLetter(actionCompleted.Message)) + "\n")
+		}
 	}
 
 	if len(m.actionInProgress) > 0 {
 		s.WriteString(m.spinner.View() + " " + textStyleBold(m.actionInProgress) + "\n")
-	}
-
-	if len(m.actionError) > 0 {
-		s.WriteString(errorMark.Render() + " " + textStyleBold(capitalizeFirstLetter(m.actionError)) + "\n")
 	}
 
 	if m.showSelection {
