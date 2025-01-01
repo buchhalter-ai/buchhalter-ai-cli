@@ -186,8 +186,12 @@ Please read "Sign in to 1Password CLI" at https://developer.1password.com/docs/c
 		readableError = errors.New(`could not read response data from 1Password vault`)
 
 	case CommandExecutionError:
-		ceErr, _ := err.(*CommandExecutionError)
-		readableError = fmt.Errorf("an error occurred while executing a command '%s': %w", ceErr.Cmd, ceErr.Err)
+		var cmdExecError *CommandExecutionError
+		if errors.As(err, &cmdExecError) {
+			readableError = fmt.Errorf("an error occurred while executing a command '%s': %w", cmdExecError.Cmd, cmdExecError.Err)
+		} else {
+			readableError = fmt.Errorf("%w", err)
+		}
 	}
 
 	return readableError
