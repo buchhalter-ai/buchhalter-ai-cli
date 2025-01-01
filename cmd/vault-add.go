@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -60,6 +61,14 @@ func RunVaultAddCommand(cmd *cobra.Command, args []string) {
 	if selectedVault != nil {
 		selectedVaultName = selectedVault.ID
 	}
+
+	// Text input for SaaS API key
+	apiKeyTextInput := textinput.New()
+	apiKeyTextInput.Placeholder = "Your buchhalter SaaS API key"
+	apiKeyTextInput.Focus()
+	apiKeyTextInput.CharLimit = 64
+	apiKeyTextInput.Width = 64
+
 	viewModel := ViewModelVaultAdd{
 		// UI
 		actionsCompleted: []string{},
@@ -72,6 +81,11 @@ func RunVaultAddCommand(cmd *cobra.Command, args []string) {
 		// Vault selection
 		showSelection:        false,
 		defaultVaultInConfig: selectedVaultName,
+
+		// SaaS API key Input
+		showAPIKeyInput: false,
+		apiKeyTextInput: apiKeyTextInput,
+		apiKey:          "",
 	}
 
 	// Run the program
@@ -108,6 +122,11 @@ type ViewModelVaultAdd struct {
 	selectionCursor      int
 	defaultVaultInConfig string
 	selectionChoices     []vault.Vault
+
+	// SaaS API key Input
+	showAPIKeyInput bool
+	apiKeyTextInput textinput.Model
+	apiKey          string
 }
 
 type vaultSelectErrorMsg struct {
@@ -137,7 +156,7 @@ func vaultSelectInitCmd() tea.Msg {
 }
 
 func (m ViewModelVaultAdd) Init() tea.Cmd {
-	return tea.Batch(vaultSelectInitCmd, m.spinner.Tick)
+	return tea.Batch(vaultSelectInitCmd, m.spinner.Tick, textinput.Blink)
 }
 
 func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -148,36 +167,75 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "enter":
-			// We only allow enter if the vault selection is shown
-			if !m.showSelection {
+			// We only allow enter if the vault selection OR the API key input field is shown
+			if !m.showSelection && !m.showAPIKeyInput {
 				return m, nil
 			}
 
-			selectedVaultName := m.selectionChoices[m.selectionCursor].Name
+			// Vault selection
+			if m.showSelection {
+				selectedVaultName := m.selectionChoices[m.selectionCursor].Name
 
-			// Deactivate selection
-			m.showSelection = false
-			m.actionInProgress = ""
-			m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("Selected the 1Password vault %s to be added to buchhalter-cli configuration", selectedVaultName))
+				// Deactivate selection
+				m.showSelection = false
+				m.actionInProgress = ""
+				m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("Selected the 1Password vault %s to be added to buchhalter-cli configuration", selectedVaultName))
+
+				// Show API key input
+				m.showAPIKeyInput = true
+				m.actionInProgress = "Enter the buchhalter SaaS-API Key that should be used with buchhalter-cli"
+
+				return m, nil
+			}
+
+			// SaaS API key input
+			if m.showAPIKeyInput {
+				apiKey := m.apiKeyTextInput.Value()
+				apiKey = strings.TrimSpace(apiKey)
+
+				// Deactivate API key input
+				m.showAPIKeyInput = false
+				m.actionInProgress = ""
+
+				switch {
+				// API keys are 64 characters long
+				case len(apiKey) == 64:
+					m.apiKey = apiKey
+
+					apiKey = maskString(apiKey)
+					m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("buchhalter SaaS API Key %s received", apiKey))
+
+					// TODO: Validate API key
+					// m.actionInProgress = "Validating buchhalter SaaS API Key"
+				case len(apiKey) == 0:
+					m.actionsCompleted = append(m.actionsCompleted, "Skipping. No buchhalter SaaS API Key added to buchhalter-cli configuration")
+				default:
+					m.actionError = fmt.Sprintf("Skipping. buchhalter SaaS API Key has not the correct length (%d chars, expected a 64 char key)", len(apiKey))
+				}
+			}
 
 			return m, func() tea.Msg {
 				vaultID := m.selectionChoices[m.selectionCursor].ID
 				vaultName := m.selectionChoices[m.selectionCursor].Name
 
 				// Prefill existing API key and selected value if vault exists in configuration already
-				existingApiKey := ""
 				existingSelectedValue := false
 				existingVault := getVaultFromVaultListByVaultID(m.vaults, vaultID)
 				if existingVault != nil {
-					existingApiKey = existingVault.BuchhalterAPIKey
 					existingSelectedValue = existingVault.Selected
+				}
+
+				// If the API key is not 64 characters long, we invalidate it
+				configAPIKey := m.apiKey
+				if len(configAPIKey) != 64 {
+					configAPIKey = ""
 				}
 
 				// Craft new vault configuration
 				vaultToWrite := vaultConfiguration{
 					ID:               vaultID,
 					Name:             vaultName,
-					BuchhalterAPIKey: existingApiKey,
+					BuchhalterAPIKey: configAPIKey,
 					Selected:         existingSelectedValue,
 				}
 				vaultsToWriteList := replaceOrAddVaultByIDInVaultConfigList(m.vaults, vaultToWrite)
@@ -251,6 +309,12 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	if m.showAPIKeyInput {
+		var cmd tea.Cmd
+		m.apiKeyTextInput, cmd = m.apiKeyTextInput.Update(msg)
+		return m, cmd
+	}
+
 	return m, nil
 }
 
@@ -299,7 +363,21 @@ func (m ViewModelVaultAdd) View() string {
 		}
 	}
 
+	if m.showAPIKeyInput {
+		s.WriteString("\n")
+		s.WriteString(m.apiKeyTextInput.View())
+		s.WriteString("\n")
+	}
+
 	s.WriteString("\n(press q to quit)\n")
 
 	return s.String()
+}
+
+func maskString(input string) string {
+	start := input[:3]
+	end := input[len(input)-3:]
+
+	masked := strings.Repeat("*", len(input)-6)
+	return start + masked + end
 }
