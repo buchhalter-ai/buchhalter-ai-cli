@@ -172,14 +172,9 @@ func initConfig() {
 		os.Exit(1)
 	}
 	viper.Set("buchhalter_api_token", apiConfig.APIKey)
-	teamSlug := "default"
-	if len(apiConfig.TeamSlug) > 0 {
-		teamSlug = apiConfig.TeamSlug
-	}
-	viper.Set("buchhalter_api_team_slug", teamSlug)
 
-	// Documents directory
-	buchhalterDocumentsDirectory := filepath.Join(buchhalterDir, "documents", teamSlug)
+	// Basic Documents directory
+	buchhalterDocumentsDirectory := filepath.Join(buchhalterDir, "documents")
 	viper.Set("buchhalter_documents_directory", buchhalterDocumentsDirectory)
 
 	// Create main directory if not exists

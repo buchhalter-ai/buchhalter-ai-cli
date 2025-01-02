@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -113,14 +114,29 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		vaultSelectionMode = VaultSelectionNothingConfigured
 	}
 
+	var documentDirectoryID string
 	if selectedVault == nil {
 		selectedVault = &vaultConfiguration{}
+		documentDirectoryID = "default"
+	} else {
+		documentDirectoryID = selectedVault.ID
+	}
+
+	// Craft documents directory with Vault ID
+	// By this, we split the documents into different directories based on the vault ID
+	buchhalterDocumentsDirectory := viper.GetString("buchhalter_documents_directory")
+	buchhalterDocumentsDirectory = filepath.Join(buchhalterDocumentsDirectory, documentDirectoryID)
+
+	// Create documents directory if not exists
+	if err := utils.CreateDirectoryIfNotExists(buchhalterDocumentsDirectory); err != nil {
+		exitMessage := fmt.Sprintf("Error creating main document directory: %w", err)
+		exitWithLogo(exitMessage)
 	}
 
 	config := &syncCommandConfig{
 		buchhalterDirectory:          viper.GetString("buchhalter_directory"),
 		buchhalterConfigDirectory:    viper.GetString("buchhalter_config_directory"),
-		buchhalterDocumentsDirectory: viper.GetString("buchhalter_documents_directory"),
+		buchhalterDocumentsDirectory: buchhalterDocumentsDirectory,
 		vaultConfigBinary:            viper.GetString("credential_provider_cli_command"),
 		vaultConfig:                  *selectedVault,
 		vaultConfigTag:               viper.GetString("credential_provider_item_tag"),
@@ -171,6 +187,11 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 }
 
 func getSelectedVaultConfiguration(entries []vaultConfiguration) *vaultConfiguration {
+	// If we have only one vault configured, use this one
+	if len(entries) == 1 {
+		return &entries[0]
+	}
+
 	for _, entry := range entries {
 		if entry.Selected {
 			return &entry
@@ -403,7 +424,6 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	p.Send(utils.ViewStatusUpdateMsg{Message: statusUpdateMessage})
 	p.Send(utils.ViewProgressUpdateMsg{Percent: 0.001})
 
-	buchhalterDocumentsDirectory := viper.GetString("buchhalter_documents_directory")
 	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
 	buchhalterMaxDownloadFilesPerReceipt := viper.GetInt("buchhalter_max_download_files_per_receipt")
 
@@ -443,7 +463,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 		logger.Info("Downloading invoices ...", "supplier", recipesToExecute[i].recipe.Supplier, "supplier_type", recipesToExecute[i].recipe.Type)
 		switch recipesToExecute[i].recipe.Type {
 		case "browser":
-			browserDriver, err := browser.NewBrowserDriver(logger, recipeCredentials, buchhalterDocumentsDirectory, documentArchive, buchhalterMaxDownloadFilesPerReceipt)
+			browserDriver, err := browser.NewBrowserDriver(logger, recipeCredentials, config.buchhalterDocumentsDirectory, documentArchive, buchhalterMaxDownloadFilesPerReceipt)
 			if err != nil {
 				logger.Error("Error initializing a new browser driver", "error", err, "supplier", recipesToExecute[i].recipe.Supplier)
 				p.Send(utils.ViewStatusUpdateMsg{
@@ -475,7 +495,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 			// In case of an external abort signal (e.g. CTRL+C), bubbletea will call `chromedp.Cancel()`.
 
 		case "client":
-			clientDriver, err := browser.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, buchhalterDocumentsDirectory, documentArchive)
+			clientDriver, err := browser.NewClientAuthBrowserDriver(logger, recipeCredentials, buchhalterConfigDirectory, config.buchhalterDocumentsDirectory, documentArchive)
 			if err != nil {
 
 				logger.Error("Error initializing a new client auth browser driver", "error", err, "supplier", recipesToExecute[i].recipe.Supplier)
