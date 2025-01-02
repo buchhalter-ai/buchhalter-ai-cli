@@ -129,7 +129,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 
 	// Create documents directory if not exists
 	if err := utils.CreateDirectoryIfNotExists(buchhalterDocumentsDirectory); err != nil {
-		exitMessage := fmt.Sprintf("Error creating main document directory: %w", err)
+		exitMessage := fmt.Sprintf("Error creating main document directory: %s", err)
 		exitWithLogo(exitMessage)
 	}
 
