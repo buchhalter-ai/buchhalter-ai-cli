@@ -93,9 +93,9 @@ Usage:
   buchhalter [command]
 
 Available Commands:
-  connect     Connects to the Buchhalter Platform and verifies your premium membership
   help        Help about any command
   sync        Synchronize all invoices from your suppliers
+  vault       Sub-Commands to manage the password vault
   version     Output the version info
 
 Flags:
