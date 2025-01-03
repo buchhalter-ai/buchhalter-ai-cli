@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"buchhalter/lib/repository"
 	"buchhalter/lib/utils"
 )
 
@@ -129,11 +128,6 @@ func initConfig() {
 	viper.SetDefault("dev", false)
 
 	// Non documented settings (on purpose)
-	// Those settings are either part of a different configuration file or are not meant to be changed by the user
-	// E.g. when they are calculated based on other settings
-	viper.SetDefault("buchhalter_api_token", "")
-	// See below
-	// - buchhalter_api_team_slug
 	// - buchhalter_documents_directory
 
 	// Check if config file exists or create it
@@ -162,16 +156,6 @@ func initConfig() {
 		fmt.Println("Error reading config file:", err)
 		os.Exit(1)
 	}
-
-	// Read local API settings
-	dummyLogger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	buchhalterConfig := repository.NewBuchhalterConfig(dummyLogger, buchhalterConfigDir)
-	apiConfig, err := buchhalterConfig.GetLocalAPIConfig()
-	if err != nil {
-		fmt.Println("Error reading api token file:", err)
-		os.Exit(1)
-	}
-	viper.Set("buchhalter_api_token", apiConfig.APIKey)
 
 	// Basic Documents directory
 	buchhalterDocumentsDirectory := filepath.Join(buchhalterDir, "documents")
