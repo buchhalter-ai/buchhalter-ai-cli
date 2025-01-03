@@ -114,18 +114,19 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 		vaultSelectionMode = VaultSelectionNothingConfigured
 	}
 
-	var documentDirectoryID string
 	if selectedVault == nil {
-		selectedVault = &vaultConfiguration{}
-		documentDirectoryID = "default"
-	} else {
-		documentDirectoryID = selectedVault.ID
+		selectedVault = &vaultConfiguration{
+			ID:               "default",
+			Name:             "buchhalter-default",
+			BuchhalterAPIKey: "",
+			Selected:         true,
+		}
 	}
 
 	// Craft documents directory with Vault ID
 	// By this, we split the documents into different directories based on the vault ID
 	buchhalterDocumentsDirectory := viper.GetString("buchhalter_documents_directory")
-	buchhalterDocumentsDirectory = filepath.Join(buchhalterDocumentsDirectory, documentDirectoryID)
+	buchhalterDocumentsDirectory = filepath.Join(buchhalterDocumentsDirectory, selectedVault.ID)
 
 	// Create documents directory if not exists
 	if err := utils.CreateDirectoryIfNotExists(buchhalterDocumentsDirectory); err != nil {
@@ -163,8 +164,7 @@ func RunSyncCommand(cmd *cobra.Command, cmdArgs []string) {
 
 	// Init Buchhalter API client
 	apiHost := viper.GetString("buchhalter_api_host")
-	apiToken := viper.GetString("buchhalter_api_token")
-	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, config.buchhalterConfigDirectory, apiToken, cliVersion)
+	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, config.buchhalterConfigDirectory, selectedVault.BuchhalterAPIKey, cliVersion)
 	if err != nil {
 		logger.Error("Error initializing Buchhalter API client", "error", err)
 		exitMessage := fmt.Sprintf("Error initializing Buchhalter API client: %s", err)
