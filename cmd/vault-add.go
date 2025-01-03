@@ -2,14 +2,18 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"buchhalter/lib/repository"
+	"buchhalter/lib/utils"
 	"buchhalter/lib/vault"
 )
 
@@ -60,9 +64,17 @@ func RunVaultAddCommand(cmd *cobra.Command, args []string) {
 	if selectedVault != nil {
 		selectedVaultName = selectedVault.ID
 	}
+
+	// Text input for SaaS API key
+	apiKeyTextInput := textinput.New()
+	apiKeyTextInput.Placeholder = "Your buchhalter SaaS API key"
+	apiKeyTextInput.Focus()
+	apiKeyTextInput.CharLimit = 64
+	apiKeyTextInput.Width = 64
+
 	viewModel := ViewModelVaultAdd{
 		// UI
-		actionsCompleted: []string{},
+		actionsCompleted: []utils.UIAction{},
 		actionInProgress: "Initializing connection to Password Vault",
 		spinner:          spinnerModel,
 
@@ -72,6 +84,14 @@ func RunVaultAddCommand(cmd *cobra.Command, args []string) {
 		// Vault selection
 		showSelection:        false,
 		defaultVaultInConfig: selectedVaultName,
+
+		// SaaS API key Input
+		showAPIKeyInput: false,
+		apiKeyTextInput: apiKeyTextInput,
+		apiKey:          "",
+
+		// Cmd
+		logger: logger,
 	}
 
 	// Run the program
@@ -95,9 +115,8 @@ func getVaultFromVaultListByVaultID(vaults []vaultConfiguration, vaultID string)
 
 type ViewModelVaultAdd struct {
 	// UI
-	actionsCompleted []string
+	actionsCompleted []utils.UIAction
 	actionInProgress string
-	actionError      string
 	spinner          spinner.Model
 
 	// Vaults
@@ -108,6 +127,14 @@ type ViewModelVaultAdd struct {
 	selectionCursor      int
 	defaultVaultInConfig string
 	selectionChoices     []vault.Vault
+
+	// SaaS API key Input
+	showAPIKeyInput bool
+	apiKeyTextInput textinput.Model
+	apiKey          string
+
+	// Cmd
+	logger *slog.Logger
 }
 
 type vaultSelectErrorMsg struct {
@@ -116,6 +143,14 @@ type vaultSelectErrorMsg struct {
 
 type vaultSelectInitSuccessMsg struct {
 	vaults []vault.Vault
+}
+
+type verifySaaSAPIKeyResultMsg struct {
+	success bool
+	message string
+}
+
+type triggerConfigurationWriteMsg struct {
 }
 
 func vaultSelectInitCmd() tea.Msg {
@@ -137,7 +172,7 @@ func vaultSelectInitCmd() tea.Msg {
 }
 
 func (m ViewModelVaultAdd) Init() tea.Cmd {
-	return tea.Batch(vaultSelectInitCmd, m.spinner.Tick)
+	return tea.Batch(vaultSelectInitCmd, m.spinner.Tick, textinput.Blink)
 }
 
 func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -148,50 +183,74 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "enter":
-			// We only allow enter if the vault selection is shown
-			if !m.showSelection {
+			// We only allow enter if the vault selection OR the API key input field is shown
+			if !m.showSelection && !m.showAPIKeyInput {
 				return m, nil
 			}
 
-			selectedVaultName := m.selectionChoices[m.selectionCursor].Name
+			// Vault selection
+			if m.showSelection {
+				selectedVaultName := m.selectionChoices[m.selectionCursor].Name
 
-			// Deactivate selection
-			m.showSelection = false
-			m.actionInProgress = ""
-			m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("Selected the 1Password vault %s to be added to buchhalter-cli configuration", selectedVaultName))
+				// Deactivate selection
+				m.showSelection = false
+				m.actionInProgress = ""
+				m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+					Message: fmt.Sprintf("Selected the 1Password vault %s to be added to buchhalter-cli configuration", selectedVaultName),
+					Style:   utils.UIActionStyleSuccess,
+				})
+
+				// Show API key input
+				m.showAPIKeyInput = true
+				m.actionInProgress = "Enter the buchhalter SaaS-API Key that should be used with buchhalter-cli"
+
+				return m, nil
+			}
+
+			// SaaS API key input
+			if m.showAPIKeyInput {
+				apiKey := m.apiKeyTextInput.Value()
+				apiKey = strings.TrimSpace(apiKey)
+
+				// Deactivate API key input
+				m.showAPIKeyInput = false
+				m.actionInProgress = ""
+
+				switch {
+				// API keys are 64 characters long
+				case len(apiKey) == 64:
+					m.apiKey = apiKey
+
+					apiKey = maskString(apiKey)
+					m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+						Message: fmt.Sprintf("buchhalter SaaS API Key %s received", apiKey),
+						Style:   utils.UIActionStyleSuccess,
+					})
+
+					m.actionInProgress = "Validating buchhalter SaaS API Key ..."
+					return m, func() tea.Msg {
+						// Validating API key
+						verifyResult, verifyMessage := verifyBuchhalterAPIKey(m.logger, m.apiKey)
+						return verifySaaSAPIKeyResultMsg{
+							success: verifyResult,
+							message: verifyMessage,
+						}
+					}
+				case len(apiKey) == 0:
+					m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+						Message: "Skipping. No buchhalter SaaS API Key added to buchhalter-cli configuration",
+						Style:   utils.UIActionStyleSuccess,
+					})
+				default:
+					m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+						Message: fmt.Sprintf("Skipping. buchhalter SaaS API Key has not the correct length (%d chars, expected a 64 char key)", len(apiKey)),
+						Style:   utils.UIActionStyleError,
+					})
+				}
+			}
 
 			return m, func() tea.Msg {
-				vaultID := m.selectionChoices[m.selectionCursor].ID
-				vaultName := m.selectionChoices[m.selectionCursor].Name
-
-				// Prefill existing API key and selected value if vault exists in configuration already
-				existingApiKey := ""
-				existingSelectedValue := false
-				existingVault := getVaultFromVaultListByVaultID(m.vaults, vaultID)
-				if existingVault != nil {
-					existingApiKey = existingVault.BuchhalterAPIKey
-					existingSelectedValue = existingVault.Selected
-				}
-
-				// Craft new vault configuration
-				vaultToWrite := vaultConfiguration{
-					ID:               vaultID,
-					Name:             vaultName,
-					BuchhalterAPIKey: existingApiKey,
-					Selected:         existingSelectedValue,
-				}
-				vaultsToWriteList := replaceOrAddVaultByIDInVaultConfigList(m.vaults, vaultToWrite)
-
-				viper.Set("credential_provider_vaults", vaultsToWriteList)
-				configFile := viper.GetString("buchhalter_config_file")
-				err := viper.WriteConfigAs(configFile)
-				if err != nil {
-					return writeConfigFileMsg{
-						vaultName: vaultName,
-						err:       err,
-					}
-				}
-				return writeConfigFileMsg{vaultName: vaultName}
+				return triggerConfigurationWriteMsg{}
 			}
 
 		case "down", "j":
@@ -222,7 +281,10 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case vaultSelectErrorMsg:
-		m.actionError = fmt.Sprintf("%s", msg.err)
+		m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+			Message: fmt.Sprintf("%s", msg.err),
+			Style:   utils.UIActionStyleError,
+		})
 		return m, tea.Quit
 
 	case vaultSelectInitSuccessMsg:
@@ -231,24 +293,102 @@ func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// No vaults found in 1Password
 		if len(msg.vaults) == 0 {
-			m.actionError = "No vaults found in 1Password"
+			m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+				Message: "No vaults found in 1Password",
+				Style:   utils.UIActionStyleError,
+			})
 			return m, tea.Quit
 		}
 
-		m.actionsCompleted = append(m.actionsCompleted, "Initializing connection to Password Vault")
+		m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+			Message: "Initializing connection to Password Vault",
+			Style:   utils.UIActionStyleSuccess,
+		})
 
 		// Show Vault selection
 		m.actionInProgress = "Select the 1Password vault that should be used with buchhalter-cli"
 		m.showSelection = true
 
+	case verifySaaSAPIKeyResultMsg:
+		m.actionInProgress = ""
+		if !msg.success {
+			m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+				Message: msg.message,
+				Style:   utils.UIActionStyleError,
+			})
+
+			// Resetting API Key
+			m.apiKey = ""
+		} else {
+			m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+				Message: msg.message,
+				Style:   utils.UIActionStyleSuccess,
+			})
+		}
+
+		return m, func() tea.Msg {
+			return triggerConfigurationWriteMsg{}
+		}
+
+	case triggerConfigurationWriteMsg:
+		return m, func() tea.Msg {
+			vaultID := m.selectionChoices[m.selectionCursor].ID
+			vaultName := m.selectionChoices[m.selectionCursor].Name
+
+			// Prefill existing API key and selected value if vault exists in configuration already
+			existingSelectedValue := false
+			existingVault := getVaultFromVaultListByVaultID(m.vaults, vaultID)
+			if existingVault != nil {
+				existingSelectedValue = existingVault.Selected
+			}
+
+			// If the API key is not 64 characters long, we invalidate it
+			configAPIKey := m.apiKey
+			if len(configAPIKey) != 64 {
+				configAPIKey = ""
+			}
+
+			// Craft new vault configuration
+			vaultToWrite := vaultConfiguration{
+				ID:               vaultID,
+				Name:             vaultName,
+				BuchhalterAPIKey: configAPIKey,
+				Selected:         existingSelectedValue,
+			}
+			vaultsToWriteList := replaceOrAddVaultByIDInVaultConfigList(m.vaults, vaultToWrite)
+
+			viper.Set("credential_provider_vaults", vaultsToWriteList)
+			configFile := viper.GetString("buchhalter_config_file")
+			err := viper.WriteConfigAs(configFile)
+			if err != nil {
+				return writeConfigFileMsg{
+					vaultName: vaultName,
+					err:       err,
+				}
+			}
+			return writeConfigFileMsg{vaultName: vaultName}
+		}
+
 	case writeConfigFileMsg:
 		if msg.err != nil {
-			m.actionError = fmt.Sprintf("Error writing config file: %s", msg.err)
+			m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+				Message: fmt.Sprintf("Error writing config file: %s", msg.err),
+				Style:   utils.UIActionStyleError,
+			})
 			return m, tea.Quit
 		}
 
-		m.actionsCompleted = append(m.actionsCompleted, fmt.Sprintf("Added 1Password vault '%s' to buchhalter configuration", msg.vaultName))
+		m.actionsCompleted = append(m.actionsCompleted, utils.UIAction{
+			Message: fmt.Sprintf("Added 1Password vault '%s' to buchhalter configuration", msg.vaultName),
+			Style:   utils.UIActionStyleSuccess,
+		})
 		return m, tea.Quit
+	}
+
+	if m.showAPIKeyInput {
+		var cmd tea.Cmd
+		m.apiKeyTextInput, cmd = m.apiKeyTextInput.Update(msg)
+		return m, cmd
 	}
 
 	return m, nil
@@ -259,15 +399,16 @@ func (m ViewModelVaultAdd) View() string {
 	s.WriteString(headerStyle(LogoText) + "\n\n")
 
 	for _, actionCompleted := range m.actionsCompleted {
-		s.WriteString(checkMark.Render() + " " + textStyleBold(actionCompleted) + "\n")
+		switch actionCompleted.Style {
+		case utils.UIActionStyleSuccess:
+			s.WriteString(checkMark.Render() + " " + textStyleBold(actionCompleted.Message) + "\n")
+		case utils.UIActionStyleError:
+			s.WriteString(errorMark.Render() + " " + errorStyle.Render(capitalizeFirstLetter(actionCompleted.Message)) + "\n")
+		}
 	}
 
 	if len(m.actionInProgress) > 0 {
 		s.WriteString(m.spinner.View() + " " + textStyleBold(m.actionInProgress) + "\n")
-	}
-
-	if len(m.actionError) > 0 {
-		s.WriteString(errorMark.Render() + " " + textStyleBold(capitalizeFirstLetter(m.actionError)) + "\n")
 	}
 
 	if m.showSelection {
@@ -299,7 +440,42 @@ func (m ViewModelVaultAdd) View() string {
 		}
 	}
 
+	if m.showAPIKeyInput {
+		s.WriteString("\n")
+		s.WriteString(m.apiKeyTextInput.View())
+		s.WriteString("\n")
+	}
+
 	s.WriteString("\n(press q to quit)\n")
 
 	return s.String()
+}
+
+func maskString(input string) string {
+	start := input[:3]
+	end := input[len(input)-3:]
+
+	masked := strings.Repeat("*", len(input)-6)
+	return start + masked + end
+}
+
+func verifyBuchhalterAPIKey(logger *slog.Logger, apiKey string) (bool, string) {
+	buchhalterConfigDirectory := viper.GetString("buchhalter_config_directory")
+	apiHost := viper.GetString("buchhalter_api_host")
+	buchhalterAPIClient, err := repository.NewBuchhalterAPIClient(logger, apiHost, buchhalterConfigDirectory, apiKey, cliVersion)
+	if err != nil {
+		return false, "Error initializing API client"
+	}
+
+	logger.Info("Making API call")
+	cliSyncResponse, err := buchhalterAPIClient.GetAuthenticatedUser()
+	if err != nil {
+		return false, "API call not successful, response could not be read"
+	}
+
+	if cliSyncResponse == nil {
+		return false, "API Key is not valid"
+	}
+
+	return true, "API Key is valid"
 }

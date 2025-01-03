@@ -2,6 +2,8 @@ github.com/Davincible/chromedp-undetected v1.3.8 h1:Glt5Faaz3oeDrBZs1NPWjqJeSnbF
 github.com/Davincible/chromedp-undetected v1.3.8/go.mod h1:8ThyCTNGAhCc9I8q3fA5lunyNiFMaLcvhL0wpxWUi7A=
 github.com/Xuanwo/go-locale v1.1.1 h1:nhvzo1phY4LRwdrwVwKWXn5iZ0pMwwsa3o29yiDRuZc=
 github.com/Xuanwo/go-locale v1.1.1/go.mod h1:ldC3FzZeMYALkL3YYpwhr4iVYdOIUx42kORcnAHdKUo=
+github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
+github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1/go.mod h1:uYgXzlJ7ZpABp8OJ+exZzJJhRNQ2ASbcXHWsFqH8hp8=
 github.com/charmbracelet/bubbles v0.20.0 h1:jSZu6qD8cRQ6k9OMfR1WlM+ruM8fkPWkHvQWD9LIutE=
