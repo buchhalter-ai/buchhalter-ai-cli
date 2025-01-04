@@ -194,9 +194,16 @@ func (p *RecipeParser) loadLocalRecipes(buchhalterDirectory string) error {
 
 	for _, file := range files {
 		filename := file.Name()
+		// Skip non-JSON files
+		if !strings.HasSuffix(strings.ToLower(filename), ".json") {
+			p.logger.Debug("Skipping non-JSON file in recipes directory", "file", filename)
+			continue
+		}
+
 		extension := filepath.Ext(filename)
 		filenameWithoutExtension := filename[0 : len(filename)-len(extension)]
-		recipeFile, err := os.Open(filepath.Join(buchhalterDirectory, sf, filename))
+		fullPath := filepath.Join(buchhalterDirectory, sf, filename)
+		recipeFile, err := os.Open(fullPath)
 		if err != nil {
 			return err
 		}
