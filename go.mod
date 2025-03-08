@@ -7,8 +7,8 @@ require (
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/lipgloss v1.0.0
-	github.com/chromedp/cdproto v0.0.0-20241022234722-4d5d5faf59fb
-	github.com/chromedp/chromedp v0.11.2
+	github.com/chromedp/cdproto v0.0.0-20250222051814-50c6cb17f10a
+	github.com/chromedp/chromedp v0.13.1
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.19.0
@@ -25,6 +25,7 @@ require (
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
+	github.com/go-json-experiment/json v0.0.0-20250211171154-1ae217ad3535 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
