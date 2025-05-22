@@ -5,6 +5,7 @@ package browser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -583,7 +584,7 @@ func (b *BrowserDriver) parseCredentialPlaceholders(value string, credentials *v
 					if totp == "" { // Fetched TOTP is empty
 						errMsg := fmt.Sprintf("fetched TOTP for credential ID %s is empty. Please check the 1Password item", credentials.Id)
 						b.logger.Error(errMsg, "credential_id", credentials.Id) // Log as error
-						return value, fmt.Errorf(errMsg)                        // Return original value and the error
+						return value, errors.New(errMsg)                        // Return original value and the error
 					} else { // Fetched TOTP is not empty and fetch was successful
 						// Avoid logging the actual TOTP for security, log its presence or length
 						b.logger.Info("Successfully fetched TOTP on demand", "credential_id", credentials.Id, "totp_present", true)
