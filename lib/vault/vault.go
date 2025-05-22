@@ -3,16 +3,17 @@ package vault
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
-func GetProvider(provider, binary, base, tag string) (*Provider1Password, error) {
+func GetProvider(provider, binary, base, tag string, logger *slog.Logger) (*Provider1Password, error) {
 	switch provider {
 	case PROVIDER_1PASSWORD:
-		return New1PasswordProvider(binary, base, tag)
+		return New1PasswordProvider(binary, base, tag, logger)
 	}
 
 	return nil, fmt.Errorf("provider %s not supported", provider)

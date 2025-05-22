@@ -55,8 +55,9 @@ type Item struct {
 type Credentials struct {
 	Id       string
 	Username string
-	Password string
-	Totp     string
+	Password      string
+	Totp          string // This will be populated on-demand
+	VaultProvider interface{} // To store the vault provider instance (e.g., *Provider1Password)
 }
 
 const (
