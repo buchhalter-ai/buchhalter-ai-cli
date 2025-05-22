@@ -131,9 +131,9 @@ func (p Provider1Password) GetCredentialsByItemId(itemId string) (*Credentials, 
 	}
 
 	credentials := &Credentials{
-		Id:       itemId,
-		Username: getValueByField(item, "username"),
-		Password: getValueByField(item, "password"),
+		Id:            itemId,
+		Username:      getValueByField(item, "username"),
+		Password:      getValueByField(item, "password"),
 		VaultProvider: p, // Store the provider instance
 	}
 

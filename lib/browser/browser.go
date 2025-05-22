@@ -578,12 +578,12 @@ func (b *BrowserDriver) parseCredentialPlaceholders(value string, credentials *v
 					// For now, we'll log the error and proceed with an empty TOTP, which will likely cause the step to fail.
 					// This makes the failure explicit at the point of use.
 					value = strings.Replace(value, "{{ totp }}", "", -1) // Replace with empty if fetch fails
-					return value, err // Propagate the error from GetTotpForItem
+					return value, err                                    // Propagate the error from GetTotpForItem
 				} else { // err == nil
 					if totp == "" { // Fetched TOTP is empty
 						errMsg := fmt.Sprintf("fetched TOTP for credential ID %s is empty. Please check the 1Password item", credentials.Id)
 						b.logger.Error(errMsg, "credential_id", credentials.Id) // Log as error
-						return value, fmt.Errorf(errMsg) // Return original value and the error
+						return value, fmt.Errorf(errMsg)                        // Return original value and the error
 					} else { // Fetched TOTP is not empty and fetch was successful
 						// Avoid logging the actual TOTP for security, log its presence or length
 						b.logger.Info("Successfully fetched TOTP on demand", "credential_id", credentials.Id, "totp_present", true)
