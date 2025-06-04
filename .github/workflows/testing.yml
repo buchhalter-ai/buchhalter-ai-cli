@@ -32,7 +32,6 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.1
-          args: --disable staticcheck --enable errcheck,gosimple,govet,ineffassign,typecheck,unused,misspell
 
       # golangci-lint contains only a set of rules from staticcheck.
       # It's not the same thing as the staticcheck binary.
