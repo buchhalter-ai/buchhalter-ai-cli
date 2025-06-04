@@ -57,6 +57,7 @@ type Credentials struct {
 	Username      string
 	Password      string
 	Totp          string      // This will be populated on-demand
+	// TODO Get rid of interface{}
 	VaultProvider interface{} // To store the vault provider instance (e.g., *Provider1Password)
 }
 
