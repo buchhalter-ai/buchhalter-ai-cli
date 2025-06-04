@@ -375,16 +375,24 @@ func (b *BrowserDriver) stepWaitFor(ctx context.Context, step parser.Step) utils
 
 func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) utils.StepResult {
 	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector, "buchhalter_max_download_files_per_receipt", b.maxFilesDownloaded)
-
 	opts := []chromedp.QueryOption{}
 	opts = b.getSelectorTypeQueryOptions(step.SelectorType, opts)
-	var nodes []*cdp.Node
-	err := chromedp.Run(ctx, chromedp.Tasks{
-		chromedp.WaitReady(step.Selector, opts...),
-		chromedp.Nodes(step.Selector, &nodes),
-	})
+	var nodesCount int
+	err := chromedp.Run(ctx,
+		chromedp.WaitReady("document.querySelector('"+step.Selector+"')", opts...),
+		chromedp.Evaluate(fmt.Sprintf(`
+			var elements = document.querySelectorAll("%s");
+			console.log("buchhalter-ai-cli: Invoices found:", elements.length);
+			elements.length;
+		`, step.Selector), &nodesCount),
+	)
+
 	if err != nil {
-		return utils.StepResult{Status: "error", Message: err.Error()}
+		b.logger.Error("Failed to count invoice download nodes by selector", "action", step.Action, "selector", step.Selector, "error", err.Error())
+		return utils.StepResult{Status: "error", Message: "Failed to count invoice download nodes by selector. See error log for details."}
+	} else if nodesCount == 0 {
+		b.logger.Error("No elements found with the given selector", "selector", step.Selector)
+		return utils.StepResult{Status: "error", Message: "No elements found with the given selector. See error log for details."}
 	}
 
 	b.downloadedFilesCount = 0
@@ -412,41 +420,45 @@ func (b *BrowserDriver) stepDownloadAll(ctx context.Context, step parser.Step) u
 	})
 
 	// Click on download link (for client-side js stuff)
-	x := 0
 	sleepTime := 1500 * time.Millisecond
 	if step.SleepDuration > 0 {
 		sleepTime = time.Duration(step.SleepDuration) * time.Millisecond
 	}
-	for _, n := range nodes {
+
+	// Read in value steps separated by comma
+	valueSteps := strings.Split(step.Value, ",")
+
+	for x := 0; x < nodesCount; x++ {
+		combinedSelector := step.Selector + ":nth-child(" + strconv.Itoa(x+1) + ") > " + step.Value
+		b.logger.Debug("Executing recipe step ... trigger download click", "action", step.Action, "selector", combinedSelector, "loop", x, "max_files_downloaded", b.maxFilesDownloaded, "len(nodes)", nodesCount)
 		// Only download maxFilesDownloaded files
 		if b.maxFilesDownloaded > 0 && x >= b.maxFilesDownloaded {
 			b.logger.Debug("Breaking download loop, because max_files_downloaded is reached", "action", step.Action, "max_files_downloaded", b.maxFilesDownloaded, "loop", x)
 			break
 		}
 
-		b.logger.Debug("Executing recipe step ... trigger download click", "action", step.Action, "selector", n.FullXPath()+step.Value, "loop", x, "max_files_downloaded", b.maxFilesDownloaded, "len(nodes)", len(nodes))
 		wg.Add(1)
 		concurrentDownloadsPool <- struct{}{}
-		if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
-			chromedp.MouseClickNode(n),
-		}); err != nil {
-			// If we get an "Node does not have a layout object (-32000)" error here,
-			// this could mean that the node selector is not good enough.
-			// Standard selectors do a text search, which might hit more nodes than we need (or elements that are not a node at all)
-			// Possible solutions:
-			// - Use a more specific selector
-			// - Use a different selector type
-			// See https://pkg.go.dev/github.com/chromedp/chromedp#hdr-Query_Options for more information
-			return utils.StepResult{Status: "error", Message: err.Error()}
-		}
 
-		if step.Value != "" {
+		for _, valueStep := range valueSteps {
+			combinedSelector := step.Selector + ":nth-child(" + strconv.Itoa(x+1) + ") > " + strings.TrimSpace(valueStep)
 			if err := chromedp.Run(ctx, fetch.Enable(), chromedp.Tasks{
-				chromedp.WaitVisible(n.FullXPath() + step.Value),
-				chromedp.Click(n.FullXPath() + step.Value),
+				chromedp.Evaluate(fmt.Sprintf("console.log('buchhalter-ai-cli: Clicking element with selector: %s');window.scrollTo(0,document.body.scrollHeight);", combinedSelector), nil),
+				chromedp.Click(fmt.Sprintf("document.querySelector('%s')", combinedSelector), opts...),
 			}); err != nil {
-				return utils.StepResult{Status: "error", Message: err.Error()}
+				// If we get an "Node does not have a layout object (-32000)" error here,
+				// this could mean that the node selector is not good enough.
+				// Standard selectors do a text search, which might hit more nodes than we need (or elements that are not a node at all)
+				// Possible solutions:
+				// - Use a more specific selector
+				// - Use a different selector type
+				// See https://pkg.go.dev/github.com/chromedp/chromedp#hdr-Query_Options for more information
+				b.logger.Warn("Error clicking element", "error", err, "selector", combinedSelector)
+				// Continue to the next value step instead of returning an error
+				continue
 			}
+			// Add a small delay between clicks
+			time.Sleep(500 * time.Millisecond)
 		}
 
 		// Delay clicks to prevent too many downloads at once/rate limiting
