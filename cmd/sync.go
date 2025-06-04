@@ -238,7 +238,7 @@ func runSyncCommandLogic(p *tea.Program, logger *slog.Logger, config *syncComman
 	logger.Info("Initializing credential provider", "provider", "1Password", "cli_command", config.vaultConfigBinary, "vault", config.vaultConfig.Name, "tag", config.vaultConfigTag)
 	statusUpdateMessage := fmt.Sprintf("Initializing credential provider 1Password with vault '%s' and tag '%s'", config.vaultConfig.Name, config.vaultConfigTag)
 	p.Send(utils.ViewStatusUpdateMsg{Message: statusUpdateMessage})
-	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, config.vaultConfigBinary, config.vaultConfig.Name, config.vaultConfigTag)
+	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, config.vaultConfigBinary, config.vaultConfig.Name, config.vaultConfigTag, logger)
 	if err != nil {
 		logger.Error("error initializing credential provider 1Password: %s", "error", err)
 		p.Send(utils.ViewStatusUpdateMsg{

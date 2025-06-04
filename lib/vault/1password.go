@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 const (
@@ -24,13 +26,20 @@ type Provider1Password struct {
 
 	// TODO Check if this is needed
 	UrlsByItemId map[string][]string
+
+	logger *slog.Logger
 }
 
-func New1PasswordProvider(binary, base, tag string) (*Provider1Password, error) {
+func New1PasswordProvider(binary, base, tag string, logger *slog.Logger) (*Provider1Password, error) {
+	if logger == nil {
+		// Fallback to a default logger if none is provided, though ideally it should always be passed.
+		logger = slog.Default()
+	}
 	p := &Provider1Password{
 		base:         base,
 		tag:          tag,
 		UrlsByItemId: make(map[string][]string),
+		logger:       logger,
 	}
 
 	binaryPath, err := DetermineBinary(binary)
@@ -85,7 +94,6 @@ func (p *Provider1Password) LoadVaultItems() (Items, error) {
 	}
 
 	// Read in all urls from a vault item and build up urls per item id map
-	// TODO Check if this is really needed
 	for n := 0; n < len(vaultItems); n++ {
 		var urls []string
 		for i := 0; i < len(vaultItems[n].Urls); i++ {
@@ -123,13 +131,55 @@ func (p Provider1Password) GetCredentialsByItemId(itemId string) (*Credentials, 
 	}
 
 	credentials := &Credentials{
-		Id:       itemId,
-		Username: getValueByField(item, "username"),
-		Password: getValueByField(item, "password"),
-		Totp:     getValueByField(item, "totp"),
+		Id:            itemId,
+		Username:      getValueByField(item, "username"),
+		Password:      getValueByField(item, "password"),
+		VaultProvider: p, // Store the provider instance
 	}
 
 	return credentials, nil
+}
+
+// GetTotpForItem fetches only the TOTP for a given item ID.
+func (p Provider1Password) GetTotpForItem(itemId string) (string, error) {
+	const totpWindowSeconds = 30
+	const minValidityThresholdSeconds = 5
+	const waitBufferSeconds = 1 // Wait 1 second into the new window
+
+	now := time.Now()
+	currentWindowConsumedSeconds := now.Unix() % totpWindowSeconds
+	remainingSecondsInWindow := totpWindowSeconds - currentWindowConsumedSeconds
+
+	if remainingSecondsInWindow < minValidityThresholdSeconds {
+		waitDuration := time.Duration(remainingSecondsInWindow+waitBufferSeconds) * time.Second
+		p.logger.Info("Current TOTP window is about to expire", "remaining_seconds", remainingSecondsInWindow, "wait_duration", waitDuration.String())
+		time.Sleep(waitDuration)
+		p.logger.Info("Waited for new TOTP window, proceeding to fetch code.")
+	}
+
+	cmdArgs := p.buildVaultCommandArguments([]string{"item", "get", itemId}, true, false)
+
+	// #nosec G204
+	itemGetResponse, err := exec.Command(p.binary, cmdArgs...).Output()
+	if err != nil {
+		return "", ProviderNotInstalledError{
+			Code: ProviderNotInstalledErrorCode,
+			Cmd:  fmt.Sprintf("%s %s", p.binary, strings.Join(cmdArgs, " ")),
+			Err:  err,
+		}
+	}
+
+	var item Item
+	err = json.Unmarshal(itemGetResponse, &item)
+	if err != nil {
+		return "", ProviderResponseParsingError{
+			Code: ProviderResponseParsingErrorCode,
+			Cmd:  fmt.Sprintf("%s %s", p.binary, strings.Join(cmdArgs, " ")),
+			Err:  err,
+		}
+	}
+
+	return getValueByField(item, "totp"), nil
 }
 
 func (p Provider1Password) buildVaultCommandArguments(baseCmd []string, limitVault, includeTag bool) []string {

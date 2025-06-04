@@ -5,6 +5,7 @@ package browser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -327,7 +328,12 @@ func (b *BrowserDriver) stepClick(ctx context.Context, step parser.Step) utils.S
 func (b *BrowserDriver) stepType(ctx context.Context, step parser.Step, credentials *vault.Credentials) utils.StepResult {
 	b.logger.Debug("Executing recipe step", "action", step.Action, "selector", step.Selector, "value", step.Value)
 
-	step.Value = b.parseCredentialPlaceholders(step.Value, credentials)
+	parsedValue, err := b.parseCredentialPlaceholders(step.Value, credentials)
+	if err != nil {
+		b.logger.Error("Failed to parse credential placeholders for stepType", "error", err.Error())
+		return utils.StepResult{Status: "error", Message: fmt.Sprintf("Error processing credentials: %v", err)}
+	}
+	step.Value = parsedValue
 
 	opts := []chromedp.QueryOption{
 		chromedp.NodeReady,
@@ -557,11 +563,48 @@ func (b *BrowserDriver) stepRunScriptDownloadUrls(ctx context.Context, step pars
 	return utils.StepResult{Status: "success"}
 }
 
-func (b *BrowserDriver) parseCredentialPlaceholders(value string, credentials *vault.Credentials) string {
+func (b *BrowserDriver) parseCredentialPlaceholders(value string, credentials *vault.Credentials) (string, error) {
 	value = strings.Replace(value, "{{ username }}", credentials.Username, -1)
 	value = strings.Replace(value, "{{ password }}", credentials.Password, -1)
-	value = strings.Replace(value, "{{ totp }}", credentials.Totp, -1)
-	return value
+
+	if strings.Contains(value, "{{ totp }}") {
+		if credentials != nil && credentials.VaultProvider != nil {
+			// Try to assert the type to *vault.Provider1Password
+			// In the future, this might need to be a more generic interface call
+			if provider, ok := credentials.VaultProvider.(interface{ GetTotpForItem(string) (string, error) }); ok {
+				totp, err := provider.GetTotpForItem(credentials.Id)
+				if err != nil {
+					b.logger.Error("Failed to fetch TOTP on demand", "credential_id", credentials.Id, "error", err.Error())
+					// Decide how to handle error: return original value, or empty string for totp, or propagate error
+					// For now, we'll log the error and proceed with an empty TOTP, which will likely cause the step to fail.
+					// This makes the failure explicit at the point of use.
+					value = strings.Replace(value, "{{ totp }}", "", -1) // Replace with empty if fetch fails
+					return value, err                                    // Propagate the error from GetTotpForItem
+				} else { // err == nil
+					if totp == "" { // Fetched TOTP is empty
+						errMsg := fmt.Sprintf("fetched TOTP for credential ID %s is empty. Please check the 1Password item", credentials.Id)
+						b.logger.Error(errMsg, "credential_id", credentials.Id) // Log as error
+						return value, errors.New(errMsg)                        // Return original value and the error
+					} else { // Fetched TOTP is not empty and fetch was successful
+						// Avoid logging the actual TOTP for security, log its presence or length
+						b.logger.Info("Successfully fetched TOTP on demand", "credential_id", credentials.Id, "totp_present", true)
+						value = strings.Replace(value, "{{ totp }}", totp, -1)
+						credentials.Totp = totp // Optionally update the credentials struct's Totp field
+						// Successful path, error is nil, will be returned by the function's main return path
+					}
+				}
+			} else {
+				b.logger.Warn("VaultProvider does not support GetTotpForItem or is not of expected type. {{totp}} placeholder will not be resolved.", "credential_id", credentials.Id)
+				return value, fmt.Errorf("VaultProvider for credential ID %s does not support GetTotpForItem or is not of expected type; {{totp}} placeholder could not be resolved", credentials.Id)
+			}
+		} else {
+			b.logger.Warn("Credentials or VaultProvider is nil, cannot fetch TOTP on demand. {{totp}} placeholder will not be resolved.", "credential_id", credentials.Id)
+			// Return an error because we expected to fetch a TOTP but couldn't due to missing provider/credentials info for it.
+			return value, fmt.Errorf("credentials or VaultProvider is nil for credential ID %s, cannot fetch TOTP on demand; {{totp}} placeholder could not be resolved", credentials.Id)
+		}
+	} // else, no {{ totp }} placeholder found, nothing to do for totp
+
+	return value, nil
 }
 
 func (b *BrowserDriver) disableImages(ctx context.Context) func(event interface{}) {

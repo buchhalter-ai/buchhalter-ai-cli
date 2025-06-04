@@ -153,10 +153,10 @@ type verifySaaSAPIKeyResultMsg struct {
 type triggerConfigurationWriteMsg struct {
 }
 
-func vaultSelectInitCmd() tea.Msg {
+func vaultSelectInitCmd(logger *slog.Logger) tea.Msg {
 	// Init vault provider
 	vaultConfigBinary := viper.GetString("credential_provider_cli_command")
-	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, vaultConfigBinary, "", "")
+	vaultProvider, err := vault.GetProvider(vault.PROVIDER_1PASSWORD, vaultConfigBinary, "", "", logger)
 	if err != nil {
 		return vaultSelectErrorMsg{err: vaultProvider.GetHumanReadableErrorMessage(err)}
 	}
@@ -172,7 +172,13 @@ func vaultSelectInitCmd() tea.Msg {
 }
 
 func (m ViewModelVaultAdd) Init() tea.Cmd {
-	return tea.Batch(vaultSelectInitCmd, m.spinner.Tick, textinput.Blink)
+	// Pass m.logger to vaultSelectInitCmd
+	// vaultSelectInitCmd needs to be adapted to return a Cmd, or we wrap it
+	// For now, let's create a command that calls it with the logger
+	initCmd := func() tea.Msg {
+		return vaultSelectInitCmd(m.logger)
+	}
+	return tea.Batch(initCmd, m.spinner.Tick, textinput.Blink)
 }
 
 func (m ViewModelVaultAdd) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
